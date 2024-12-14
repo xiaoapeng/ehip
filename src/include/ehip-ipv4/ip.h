@@ -44,9 +44,13 @@ typedef uint32_t ipv4_addr_t;
 #define IPV4_ADDR_DEFAULT_CLASS_C_MASK_LEN 24
 #define IPV4_ADDR_DEFAULT_CLASS_D_MASK_LEN 3
 
+#define IPV4_ATTR_FLAG_ARP_SUPPORT	(1 << 0)
+
+
 struct ipv4_netdev{
 	struct eh_list_head							node;
     ipv4_addr_t                                 ipv4_addr[EHIP_NETDEV_MAX_IP_NUM];
+	uint32_t									attr_flags;
 	uint8_t										ipv4_mask_len[EHIP_NETDEV_MAX_IP_NUM];
 	uint8_t 									ipv4_addr_num;
 };
@@ -67,6 +71,17 @@ struct ipv4_netdev{
 #define ipv4_addr_to_dec2(addr) ( ((addr) & 0x0000ff00) >> 8  )
 #define ipv4_addr_to_dec3(addr) ( ((addr) & 0x000000ff) >> 0  )
 #endif
+
+
+#define ipv4_netdev_flags_is_arp_support(netdev) ((netdev)->attr_flags & IPV4_ATTR_FLAG_ARP_SUPPORT)
+#define ipv4_netdev_flags_set_arp_support(netdev) ((netdev)->attr_flags |= IPV4_ATTR_FLAG_ARP_SUPPORT)
+
+static inline void _ipv4_netdev_reset(struct ipv4_netdev *netdev){
+    netdev->ipv4_addr_num = 0;
+}
+
+extern void _ipv4_netdev_up(struct ipv4_netdev *netdev);
+extern void _ipv4_netdev_down(struct ipv4_netdev *netdev);
 
 
 static inline bool ipv4_is_multicast(ipv4_addr_t addr)
@@ -161,12 +176,6 @@ static inline bool ipv4_is_class_d(ipv4_addr_t addr)
 {
 	return (addr & eh_hton32(0xf0000000)) == eh_hton32(0xe0000000);
 }
-
-extern void ipv4_netdev_reset(struct ipv4_netdev *netdev);
-
-extern void ipv4_netdev_up(struct ipv4_netdev *netdev);
-
-extern void ipv4_netdev_down(struct ipv4_netdev *netdev);
 
 
 

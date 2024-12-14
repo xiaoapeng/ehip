@@ -11,15 +11,17 @@
 #ifndef __IPV4_ARP_H__
 #define __IPV4_ARP_H__
 
+
 #ifndef _ARP_H_
 #define _ARP_H_
 
 #include <stdint.h>
 #include <eh_types.h>
-#include <ehip_netdev_trait.h>
+#include <eh_signal.h>
 #include <ehip_netdev.h>
 #include <ehip-mac/hw_addr.h>
 #include <ehip-ipv4/ip.h>
+#include <ehip_netdev_trait.h>
 #ifdef __cplusplus
 #if __cplusplus
 extern "C"{
@@ -34,6 +36,10 @@ struct arp_hdr{
 	uint16_t		ar_op;		/* ARP opcode (command)		*/
 }eh_aligned(sizeof(char));
 
+/**
+ * @brief arp表条目变化信号，当有邻近项有效或者无效状态发生变化时会触发该信号
+ */
+EH_EXTERN_SIGNAL(signal_arptable_changed);
 
 struct arp_entry{
 	uint16_t 					reachable_time_cd;

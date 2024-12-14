@@ -109,14 +109,10 @@ bool ipv4_netdev_is_local_addr(ipv4_addr_t addr){
 
 
 
-void ipv4_netdev_reset(struct ipv4_netdev *netdev){
-    netdev->ipv4_addr_num = 0;
-}
-
-void ipv4_netdev_up(struct ipv4_netdev *netdev){
+void _ipv4_netdev_up(struct ipv4_netdev *netdev){
     eh_list_add(&netdev->node, &s_ipv4_dev_head);
 }
 
-void ipv4_netdev_down(struct ipv4_netdev *netdev){
+void _ipv4_netdev_down(struct ipv4_netdev *netdev){
     eh_list_del(&netdev->node);
 }

@@ -96,12 +96,12 @@ int ethernet_dev_trait_change(ehip_netdev_t *netdev, const void *type_ptr, const
 
 static int ethernet_dev_trait_up(ehip_netdev_t *netdev){
     struct ethernet_trait *netdev_ethernet_trait = (struct ethernet_trait *)ehip_netdev_to_trait(netdev);
-    ipv4_netdev_up(&netdev_ethernet_trait->ipv4_netdev);
+    _ipv4_netdev_up(&netdev_ethernet_trait->ipv4_netdev);
     return 0;
 }
 static void ethernet_dev_trait_down(ehip_netdev_t *netdev){
     struct ethernet_trait *netdev_ethernet_trait = (struct ethernet_trait *)ehip_netdev_to_trait(netdev);
-    ipv4_netdev_down(&netdev_ethernet_trait->ipv4_netdev);
+    _ipv4_netdev_down(&netdev_ethernet_trait->ipv4_netdev);
 }
 
 static void ethernet_dev_trait_reset(ehip_netdev_t *netdev){
@@ -115,6 +115,8 @@ static void ethernet_dev_trait_reset(ehip_netdev_t *netdev){
     netdev->attr.buffer_type = EHIP_BUFFER_TYPE_ETHERNET_FRAME;
     netdev_ethernet_trait->mac_ptype = EHIP_PTYPE_ETHERNET_II_FRAME;
     memcpy(&netdev_ethernet_trait->broadcast_hw_addr, EHIP_ETH_MAC_ADDR_BROADCAST, EHIP_ETH_HWADDR_LEN);
+    _ipv4_netdev_reset(&netdev_ethernet_trait->ipv4_netdev);
+    ipv4_netdev_flags_set_arp_support(&netdev_ethernet_trait->ipv4_netdev);
 }
 
 
