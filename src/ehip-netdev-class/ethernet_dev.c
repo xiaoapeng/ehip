@@ -79,6 +79,7 @@ int ethernet_dev_trait_change(ehip_netdev_t *netdev, const void *type_ptr, const
         }
         case ehip_netdev_trait_offsetof(struct ethernet_trait, broadcast_hw_addr):
             ret = EH_RET_NOT_SUPPORTED;
+            break;
         default:
             if( offset >= ehip_netdev_trait_offsetof(struct ethernet_trait, multicast_hw_addr) && 
                 offset <  (ehip_netdev_trait_offsetof(struct ethernet_trait, 
