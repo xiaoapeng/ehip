@@ -42,7 +42,10 @@ struct arp_hdr{
 EH_EXTERN_SIGNAL(signal_arptable_changed);
 
 struct arp_entry{
-	uint16_t 					reachable_time_cd;
+	union{
+		uint16_t 					reachable_time_cd;
+		uint16_t					stale_time;
+	};
 	union{
 		uint16_t 					delay_probe_time_cd;
 		uint16_t					retry_cnt;
@@ -68,6 +71,28 @@ static inline unsigned int arp_hdr_len(const ehip_netdev_t *dev)
 {
 	return sizeof(struct arp_hdr) + ((size_t)dev->attr.hw_addr_len + sizeof(uint32_t)) * 2;
 }
+
+/**
+ * @brief                   查询ip地址对应的arp表项，若表项不存在，需要等signal_arptable_changed信号触发后，
+ *                          再进行查询
+ * @param  netdev           网卡设备句柄指针，也作为参数，用于判断arp表项是否属于该网卡
+ * @param  ip_addr          ip地址
+ * @param  odl_idx_or_minus arp表旧的索引，若该条目还存在，则可以加快查询，
+ *                          若为负数则轮询整个arp表。
+ * @return int              成功返回0及正数(idx)，失败返回负数，若需要进行慢查询，则返回EH_RET_AGAIN
+ *                          上层协议需要等signal_arptable_changed信号触发后，再进行查询
+ */
+extern int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int odl_idx_or_minus);
+
+/**
+ * @brief                   如果三层或者以上的协议确认了该IP的可达性，则调用该函数告诉arp层
+ * @param  netdev           网卡设备句柄指针，也作为参数，用于判断arp表项是否属于该网卡
+ * @param  ip_addr          ip地址
+ * @param  odl_idx_or_minus arp表旧的索引，若该条目还存在，则可以加快函数过程
+ * @return int 
+ */
+extern int arp_update_reachability(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int odl_idx_or_minus);
+
 
 #ifdef __cplusplus
 #if __cplusplus

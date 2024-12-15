@@ -88,8 +88,15 @@
 #define EHIP_ARP_CACHE_MAX_NUM                                  16U
 #endif
 
+/* arp重试次数 */
 #ifndef EHIP_ARP_MAX_RETRY_CNT
 #define EHIP_ARP_MAX_RETRY_CNT                                  5U
 #endif
+
+/* arp delay_probe_time 时间 */
+#ifndef EHIP_ARP_DELAY_PROBE_TIME
+#define EHIP_ARP_DELAY_PROBE_TIME                               2U
+#endif
+
 
 #endif // _EHIP_CONF_H_
