@@ -98,5 +98,10 @@
 #define EHIP_ARP_DELAY_PROBE_TIME                               2U
 #endif
 
+/* reachable_time 时间 */
+#ifndef EHIP_ARP_REACHABLE_TIME
+#define EHIP_ARP_REACHABLE_TIME                                 300U
+#endif
+
 
 #endif // _EHIP_CONF_H_

@@ -36,10 +36,6 @@ struct arp_hdr{
 	uint16_t		ar_op;		/* ARP opcode (command)		*/
 }eh_aligned(sizeof(char));
 
-/**
- * @brief arp表条目变化信号，当有邻近项有效或者无效状态发生变化时会触发该信号
- */
-EH_EXTERN_SIGNAL(signal_arptable_changed);
 
 struct arp_entry{
 	union{
@@ -57,6 +53,16 @@ struct arp_entry{
 };
 
 
+enum etharp_state{
+    ARP_STATE_NUD_FAILED,                   /* 未使用状态，该状态邻居项无效 */
+    ARP_STATE_NUD_NONE,                     /* 刚建立状态，该状态邻居项无效 */
+    ARP_STATE_NUD_INCOMPLETE,               /* 定时发送Solicitation请求，该状态邻居项无效 */
+    ARP_STATE_NUD_STALE,                    /* 不新鲜了，随时会被垃圾回收,但若被使用，则会迁移到ARP_STATE_NUD_DELAY，该状态邻居项有效 */
+    ARP_STATE_NUD_PROBE,                    /* delay_probe_time超时后，定时发送Solicitation请求，该状态邻居项有效 */
+    ARP_STATE_NUD_DELAY,                    /* reachable_time超时但delay_probe_time未超时，当delay_probe_time超时时迁移到ARP_STATE_NUD_PROBE */
+    ARP_STATE_NUD_REACHABLE                 /* 绝对可信状态，reachable_time超时后迁移出此状态 */
+};
+
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/
 #define	ARPOP_REPLY		2		/* ARP reply			*/
@@ -66,6 +72,11 @@ struct arp_entry{
 #define	ARPOP_InREPLY	9		/* InARP reply			*/
 #define	ARPOP_NAK		10		/* (ATM)ARP NAK			*/
 
+
+/**
+ * @brief arp表条目变化信号，当有邻近项有效或者无效状态发生变化时会触发该信号
+ */
+EH_EXTERN_SIGNAL(signal_arp_table_changed);
 
 static inline unsigned int arp_hdr_len(const ehip_netdev_t *dev)
 {
@@ -77,21 +88,36 @@ static inline unsigned int arp_hdr_len(const ehip_netdev_t *dev)
  *                          再进行查询
  * @param  netdev           网卡设备句柄指针，也作为参数，用于判断arp表项是否属于该网卡
  * @param  ip_addr          ip地址
- * @param  odl_idx_or_minus arp表旧的索引，若该条目还存在，则可以加快查询，
- *                          若为负数则轮询整个arp表。
- * @return int              成功返回0及正数(idx)，失败返回负数，若需要进行慢查询，则返回EH_RET_AGAIN
+ * @param  odl_idx_or_minus_or_out_idx 
+							int odl_idx_or_minus_or_out_idx = old;
+							arp_query(...., &odl_idx_or_minus_or_out_idx);
+							作为输入参数时：
+								输入旧的索引值，当旧的索引值为负数时，将遍历整个arp表,
+							作为输出参数时：
+								当返回值为不是EH_RET_AGAIN负数时,*odl_idx_or_minus_or_out_idx 为 -1
+								当返回值为0时，*odl_idx_or_minus_or_out_idx 为 arp 表项的索引值
+								当返回值为EH_RET_AGAIN时，*odl_idx_or_minus_or_out_idx 为 表项的索引值
+ * @return int              返回0成功，*odl_idx_or_minus_or_out_idx 为 arp 表项的索引值
+ *							返回EH_RET_AGAIN意味着要进行慢查询，*odl_idx_or_minus_or_out_idx 为 arp 表项的索引值
+ *							返回负数失败。
  *                          上层协议需要等signal_arptable_changed信号触发后，再进行查询
  */
-extern int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int odl_idx_or_minus);
+extern int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int *old_idx_or_minus_or_out_idx);
 
 /**
  * @brief                   如果三层或者以上的协议确认了该IP的可达性，则调用该函数告诉arp层
  * @param  netdev           网卡设备句柄指针，也作为参数，用于判断arp表项是否属于该网卡
  * @param  ip_addr          ip地址
- * @param  odl_idx_or_minus arp表旧的索引，若该条目还存在，则可以加快函数过程
+ * @param  old_idx_or_minus arp表旧的索引，若该条目还存在，则可以加快函数过程
  * @return int 
  */
-extern int arp_update_reachability(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int odl_idx_or_minus);
+extern int arp_update_reachability(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_idx_or_minus);
+
+/**
+ * @brief 					获取arp表
+ * @return const struct arp_entry* 
+ */
+extern const struct arp_entry* arp_get_table_entry(int idx);
 
 
 #ifdef __cplusplus

@@ -32,18 +32,7 @@
 #include <ehip-ipv4/ip.h>
 #include <ehip-mac/ethernet.h>
 
-enum etharp_state{
-    ARP_STATE_NUD_FAILED,                   /* 未使用状态，该状态邻居项无效 */
-    ARP_STATE_NUD_NONE,                     /* 刚建立状态，该状态邻居项无效 */
-    ARP_STATE_NUD_INCOMPLETE,               /* 定时发送Solicitation请求，该状态邻居项无效 */
-    ARP_STATE_NUD_STALE,                    /* 不新鲜了，随时会被垃圾回收,但若被使用，则会迁移到ARP_STATE_NUD_DELAY，该状态邻居项有效 */
-    ARP_STATE_NUD_PROBE,                    /* delay_probe_time超时后，定时发送Solicitation请求，该状态邻居项有效 */
-    ARP_STATE_NUD_DELAY,                    /* reachable_time超时但delay_probe_time未超时，当delay_probe_time超时时迁移到ARP_STATE_NUD_PROBE */
-    ARP_STATE_NUD_REACHABLE                 /* 绝对可信状态，reachable_time超时后迁移出此状态 */
-};
-
-
-EH_DEFINE_SIGNAL(signal_arptable_changed);
+EH_DEFINE_SIGNAL(signal_arp_table_changed);
 static struct arp_entry arp_table[EHIP_ARP_CACHE_MAX_NUM];
 EH_DEFINE_STATIC_CUSTOM_SIGNAL(signal_timer_1s, eh_event_timer_t, EH_TIMER_INIT(signal_timer_1s.custom_event));
 
@@ -77,17 +66,15 @@ static void slot_function_arp_1s_timer_handler(eh_event_t *e, void *slot_param){
                 break;
             case ARP_STATE_NUD_INCOMPLETE:
             case ARP_STATE_NUD_PROBE:
-                if(arp_table_entry->retry_cnt){
-                    /* 
-                     * 进行发送报文进行ARP查询 
-                     * ARP_STATE_NUD_PROBE 使用单播
-                     * ARP_STATE_NUD_INCOMPLETE 使用广播
-                     */
-                    ret = arp_request_dst(arp_table_entry->netdev, arp_table_entry->ip_addr, 
-                        arp_table_entry->state == ARP_STATE_NUD_INCOMPLETE ? NULL : &arp_table_entry->hw_addr);
-                    if(ret < 0)
-                        arp_state_update_change_notify((int)i, NULL, ARP_STATE_NUD_FAILED);
-                }
+                /* 
+                 * 进行发送报文进行ARP查询 
+                 * ARP_STATE_NUD_PROBE 使用单播
+                 * ARP_STATE_NUD_INCOMPLETE 使用广播
+                 */
+                ret = arp_request_dst(arp_table_entry->netdev, arp_table_entry->ip_addr, 
+                    arp_table_entry->state == ARP_STATE_NUD_INCOMPLETE ? NULL : &arp_table_entry->hw_addr);
+                if(ret < 0)
+                    arp_state_update_change_notify((int)i, NULL, ARP_STATE_NUD_FAILED);
                 arp_table_entry->retry_cnt++;
                 if(arp_table_entry->retry_cnt > EHIP_ARP_MAX_RETRY_CNT)
                     arp_state_update_change_notify((int)i, NULL, ARP_STATE_NUD_FAILED);
@@ -103,7 +90,7 @@ static void slot_function_arp_1s_timer_handler(eh_event_t *e, void *slot_param){
                 /* 绝对信任状态 */
                 if(arp_table_entry->delay_probe_time_cd)
                     arp_table_entry->delay_probe_time_cd--;
-                if(arp_table_entry->reachable_time_cd == 0 || --arp_table_entry->delay_probe_time_cd == 0){
+                if(arp_table_entry->reachable_time_cd == 0 || --arp_table_entry->reachable_time_cd == 0){
                     arp_state_update_change_notify((int)i, NULL, 
                         arp_table_entry->delay_probe_time_cd ? ARP_STATE_NUD_DELAY : ARP_STATE_NUD_STALE);
                 }
@@ -140,7 +127,7 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
                 arp_table_entry->retry_cnt = 0;
                 break;
             case ARP_STATE_NUD_REACHABLE:
-                arp_table_entry->reachable_time_cd = 0;
+                arp_table_entry->reachable_time_cd = EHIP_ARP_REACHABLE_TIME;
                 break;
             default:
                 break;
@@ -162,7 +149,7 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
         memcpy(arp_table_entry->hw_addr.addr, new_hw_addr, arp_table_entry->netdev->attr.hw_addr_len);
     }
     if(is_change)
-        eh_signal_notify(&signal_arptable_changed);
+        eh_signal_notify(&signal_arp_table_changed);
     return is_change;
 }
 
@@ -176,7 +163,7 @@ static int arp_send_dst(uint16_t be_type, enum ehip_ptype ptype, ehip_netdev_t *
     struct ehip_buffer* newbuf;
     struct arp_hdr *arp_hdr;
     uint8_t *pos;
-    if(s_hw_addr == NULL || netdev) return EH_RET_INVALID_PARAM;
+    if(s_hw_addr == NULL || netdev == NULL ) return EH_RET_INVALID_PARAM;
     newbuf = ehip_buffer_new(netdev->attr.buffer_type, netdev->attr.hw_head_size);
     if(eh_ptr_to_error(newbuf) < 0)
         return eh_ptr_to_error(newbuf);
@@ -446,7 +433,8 @@ static void arp_handle(struct ehip_buffer* buf){
         )
     ){
         arp_send_dst(eh_hton16(ARPOP_REPLY), (uint16_t)EHIP_PTYPE_ETHERNET_ARP, buf->netdev, 
-            ehip_netdev_trait_broadcast_hw(buf->netdev), s_hw_addr, d_ipv4_addr, s_ipv4_addr, s_hw_addr);
+            ehip_netdev_trait_hw_addr(buf->netdev), s_hw_addr, 
+            d_ipv4_addr, s_ipv4_addr, s_hw_addr);
         /* 创建且更新此条目，设置为ARP_STATE_NUD_STALE状态 */
         if(s_ipv4_addr){
             arp_entry_idx = arp_find_entry(buf->netdev, s_ipv4_addr, true);
@@ -471,24 +459,23 @@ drop:
     ehip_buffer_free(buf);
 }
 
-int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int odl_idx_or_minus){
+int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int *old_idx_or_minus_or_out_idx){
     int idx;
     int ret;
-    if(odl_idx_or_minus && odl_idx_or_minus < (int)EHIP_ARP_CACHE_MAX_NUM && 
-        arp_table[odl_idx_or_minus].ip_addr == ip_addr && arp_table[odl_idx_or_minus].netdev == netdev){
-        if(arp_table[odl_idx_or_minus].state == ARP_STATE_NUD_INCOMPLETE )
-            return EH_RET_AGAIN;
-        if(arp_table[odl_idx_or_minus].state >= ARP_STATE_NUD_STALE ){
-            idx = odl_idx_or_minus;
-            goto valid;
-        }
+    if(*old_idx_or_minus_or_out_idx >= 0 && *old_idx_or_minus_or_out_idx < (int)EHIP_ARP_CACHE_MAX_NUM && 
+        arp_table[*old_idx_or_minus_or_out_idx].ip_addr == ip_addr && arp_table[*old_idx_or_minus_or_out_idx].netdev == netdev && 
+        arp_table[*old_idx_or_minus_or_out_idx].state != ARP_STATE_NUD_FAILED){
+        idx = *old_idx_or_minus_or_out_idx;
+        goto valid;
     }
-
+    *old_idx_or_minus_or_out_idx = -1;
     /* 遍历整个表进行寻找，找不到就进行创建 */
     idx = arp_find_entry((ehip_netdev_t *)netdev, ip_addr, true);
     if(idx < 0)
         return idx;
     
+    /* 邻居项有效 */
+valid:
     if(arp_table[idx].state < ARP_STATE_NUD_STALE){
         if( arp_table[idx].state == ARP_STATE_NUD_NONE ){
             if( (ret = arp_request_dst(arp_table[idx].netdev, arp_table[idx].ip_addr, NULL)) < 0){
@@ -497,21 +484,42 @@ int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int odl_id
             }
             arp_state_update_change_notify(idx, NULL, ARP_STATE_NUD_INCOMPLETE);
         }
-        return idx;
+        *old_idx_or_minus_or_out_idx = idx;
+        return EH_RET_AGAIN;
     }
 
-    /* 邻居项有效 */
-valid:
     if( arp_table[idx].state == ARP_STATE_NUD_STALE || 
         arp_table[idx].state == ARP_STATE_NUD_REACHABLE){
         /* 更新延迟探测时间 */
         arp_table[idx].delay_probe_time_cd = EHIP_ARP_DELAY_PROBE_TIME;
     }
-    return idx;
+    *old_idx_or_minus_or_out_idx = idx;
+    return EH_RET_OK;
 }
 
 
+int arp_update_reachability(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_idx_or_minus){
+    int idx;
+    if(old_idx_or_minus >= 0 && old_idx_or_minus < (int)EHIP_ARP_CACHE_MAX_NUM && 
+        arp_table[old_idx_or_minus].ip_addr == ip_addr && arp_table[old_idx_or_minus].netdev == netdev && 
+        arp_table[old_idx_or_minus].state != ARP_STATE_NUD_NONE){
+        idx = old_idx_or_minus;
+        goto valid;
+    }
+    idx = arp_find_entry((ehip_netdev_t *)netdev, ip_addr, false);
+    if(idx < 0)
+        return EH_RET_OK;
+valid:
+    if( arp_table[idx].state < ARP_STATE_NUD_STALE )
+        return EH_RET_AGAIN;
+    arp_state_update_change_notify(idx, NULL, ARP_STATE_NUD_REACHABLE);
+    return EH_RET_OK;
+}
 
+
+const struct arp_entry* arp_get_table_entry(int idx){
+    return arp_table + idx;
+}
 
 
 static struct ehip_protocol_handle arp_protocol_handle = {
@@ -531,7 +539,7 @@ static void __exit arp_protocol_parser_exit(void){
 
 static int __init arp_init(void){
     int ret;
-    ret = eh_signal_register(&signal_arptable_changed);
+    ret = eh_signal_register(&signal_arp_table_changed);
     if(ret < 0) return ret;
 
     eh_timer_advanced_init(eh_signal_to_custom_event(&signal_timer_1s), (eh_sclock_t)eh_msec_to_clock(1000*1), EH_TIMER_ATTR_AUTO_CIRCULATION);
@@ -542,7 +550,7 @@ static int __init arp_init(void){
     memset(&arp_table, 0, sizeof(arp_table));
     return 0;
 signal_timer_1s_register_error:
-    eh_signal_unregister(&signal_arptable_changed);
+    eh_signal_unregister(&signal_arp_table_changed);
     return ret;
 }
 
@@ -550,9 +558,9 @@ static void __exit arp_exit(void){
     eh_timer_stop(eh_signal_to_custom_event(&signal_timer_1s));
     eh_signal_slot_disconnect(&slot_timer);
     eh_signal_unregister(&signal_timer_1s);
-    eh_signal_unregister(&signal_arptable_changed);
+    eh_signal_unregister(&signal_arp_table_changed);
     /* 避免connect signal_arptable_changed的任务继续运行导致的问题 */
-    eh_signal_clean(&signal_arptable_changed);
+    eh_signal_clean(&signal_arp_table_changed);
 }
 
 
