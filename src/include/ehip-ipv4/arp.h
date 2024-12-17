@@ -72,6 +72,8 @@ enum etharp_state{
 #define	ARPOP_InREPLY	9		/* InARP reply			*/
 #define	ARPOP_NAK		10		/* (ATM)ARP NAK			*/
 
+/* arp表， 禁止直接访问 */
+extern struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM];
 
 /**
  * @brief arp表条目变化信号，当有邻近项有效或者无效状态发生变化时会触发该信号
@@ -84,25 +86,14 @@ static inline unsigned int arp_hdr_len(const ehip_netdev_t *dev)
 }
 
 /**
- * @brief                   查询ip地址对应的arp表项，若表项不存在，需要等signal_arptable_changed信号触发后，
+ * @brief                   查询ip地址对应的arp表项
  *                          再进行查询
  * @param  netdev           网卡设备句柄指针，也作为参数，用于判断arp表项是否属于该网卡
  * @param  ip_addr          ip地址
- * @param  odl_idx_or_minus_or_out_idx 
-							int odl_idx_or_minus_or_out_idx = old;
-							arp_query(...., &odl_idx_or_minus_or_out_idx);
-							作为输入参数时：
-								输入旧的索引值，当旧的索引值为负数时，将遍历整个arp表,
-							作为输出参数时：
-								当返回值为不是EH_RET_AGAIN负数时,*odl_idx_or_minus_or_out_idx 为 -1
-								当返回值为0时，*odl_idx_or_minus_or_out_idx 为 arp 表项的索引值
-								当返回值为EH_RET_AGAIN时，*odl_idx_or_minus_or_out_idx 为 表项的索引值
- * @return int              返回0成功，*odl_idx_or_minus_or_out_idx 为 arp 表项的索引值
- *							返回EH_RET_AGAIN意味着要进行慢查询，*odl_idx_or_minus_or_out_idx 为 arp 表项的索引值
- *							返回负数失败。
- *                          上层协议需要等signal_arptable_changed信号触发后，再进行查询
+ * @param  old_idx_or_minus 输入旧的索引值，旧的索引值可加快查询速度，当为负数时，遍历整个ARP表
+ * @return int              成功返回索引值，失败返回负数。
  */
-extern int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int *old_idx_or_minus_or_out_idx);
+extern int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_idx_or_minus);
 
 /**
  * @brief                   如果三层或者以上的协议确认了该IP的可达性，则调用该函数告诉arp层
@@ -117,8 +108,20 @@ extern int arp_update_reachability(const ehip_netdev_t *netdev, const ipv4_addr_
  * @brief 					获取arp表
  * @return const struct arp_entry* 
  */
-extern const struct arp_entry* arp_get_table_entry(int idx);
+#define arp_get_table_entry(idx) (_arp_table + (idx))
 
+/**
+ * @brief 					判断邻居项是否有效
+ * @param  idx 				邻居项索引
+ * @return bool 			有效返回true，无效返回false
+ */
+#define arp_entry_neigh_is_valid(idx) (arp_get_table_entry(idx)->state >= ARP_STATE_NUD_STALE) 
+
+
+/**
+ * @brief 					arp表打印 
+ */
+extern void arp_table_dump(void);
 
 #ifdef __cplusplus
 #if __cplusplus
