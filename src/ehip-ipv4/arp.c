@@ -461,7 +461,6 @@ drop:
 
 int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_idx_or_minus){
     int idx;
-    int ret;
     if(old_idx_or_minus >= 0 && old_idx_or_minus < (int)EHIP_ARP_CACHE_MAX_NUM && 
         _arp_table[old_idx_or_minus].ip_addr == ip_addr && _arp_table[old_idx_or_minus].netdev == netdev && 
         _arp_table[old_idx_or_minus].state != ARP_STATE_NUD_FAILED){
