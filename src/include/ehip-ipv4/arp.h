@@ -29,11 +29,11 @@ extern "C"{
 #endif /* __cplusplus */
 
 struct arp_hdr{
-	uint16_t		ar_hrd;		/* format of hardware address	*/
-	uint16_t		ar_pro;		/* format of protocol address	*/
+	uint16_be_t		ar_hrd;		/* format of hardware address	*/
+	uint16_be_t		ar_pro;		/* format of protocol address	*/
     uint8_t	        ar_hln;		/* length of hardware address	*/
 	uint8_t	        ar_pln;		/* length of protocol address	*/
-	uint16_t		ar_op;		/* ARP opcode (command)		*/
+	uint16_be_t		ar_op;		/* ARP opcode (command)		*/
 }eh_aligned(sizeof(char));
 
 

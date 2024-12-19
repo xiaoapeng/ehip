@@ -16,15 +16,19 @@
 #include <stdbool.h>
 #include <eh_swab.h>
 #include <eh_list.h>
+#include <eh_types.h>
 #include <ehip_netdev.h>
 #include <ehip_conf.h>
+
+
+
 #ifdef __cplusplus
 #if __cplusplus
 extern "C"{
 #endif
 #endif /* __cplusplus */
 
-typedef uint32_t ipv4_addr_t;
+typedef uint32_be_t ipv4_addr_t;
 
 #define	IPV4_ADDR_BROADCAST	            0xffffffffU
 #define IPV4_ADDR_ANY                   0x00000000U
@@ -54,6 +58,25 @@ struct ipv4_netdev{
 	uint8_t										ipv4_mask_len[EHIP_NETDEV_MAX_IP_NUM];
 	uint8_t 									ipv4_addr_num;
 };
+
+struct ip_hdr{
+#ifdef __BYTE_ORDER_LITTLE_ENDIAN__
+	uint8_t			ihl:4;
+	uint8_t			version:4;
+#else
+	uint8_t			version:4;
+	uint8_t			ihl:4;
+#endif
+	uint8_t			tos;
+	uint16_be_t		tot_len;
+	uint16_be_t		id;
+	uint16_be_t		frag_off;
+	uint8_t			ttl;
+	uint8_t			protocol;
+	uint16_t		check;
+	ipv4_addr_t		src_addr;
+	ipv4_addr_t		dst_addr;
+}eh_aligned(1);
 
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -227,6 +250,7 @@ extern int ipv4_netdev_set_sub_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t ad
  * @param  addr             要删除的IP地址
  */
 extern void ipv4_netdev_del_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr);
+
 /**
  * @brief 					判断地址是否为本地地址
  * @param  addr             要判断的ip地址

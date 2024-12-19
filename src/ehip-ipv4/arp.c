@@ -36,7 +36,7 @@ EH_DEFINE_SIGNAL(signal_arp_table_changed);
 struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM];
 EH_DEFINE_STATIC_CUSTOM_SIGNAL(signal_timer_1s, eh_event_timer_t, EH_TIMER_INIT(signal_timer_1s.custom_event));
 
-static int arp_send_dst(uint16_t be_type, enum ehip_ptype ptype, ehip_netdev_t *netdev, 
+static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *netdev, 
     const ehip_hw_addr_t *s_hw_addr, const ehip_hw_addr_t *d_hw_addr, 
     ipv4_addr_t s_ipv4_addr, ipv4_addr_t d_ipv4_addr, const ehip_hw_addr_t *target_hw_addr);
 
@@ -156,7 +156,7 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
 
 
 
-static int arp_send_dst(uint16_t be_type, enum ehip_ptype ptype, ehip_netdev_t *netdev, 
+static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *netdev, 
     const ehip_hw_addr_t *s_hw_addr, const ehip_hw_addr_t *d_hw_addr, 
     ipv4_addr_t s_ipv4_addr, ipv4_addr_t d_ipv4_addr, const ehip_hw_addr_t *target_hw_addr){
     int ret;
@@ -184,7 +184,7 @@ static int arp_send_dst(uint16_t be_type, enum ehip_ptype ptype, ehip_netdev_t *
     arp_hdr->ar_hrd = eh_hton16(netdev->type);
     arp_hdr->ar_pro = eh_hton16(EHIP_ETH_P_IP);
 
-    arp_hdr->ar_op = be_type;
+    arp_hdr->ar_op = type;
     arp_hdr->ar_hln = netdev->attr.hw_addr_len;
     arp_hdr->ar_pln = 4;
 
