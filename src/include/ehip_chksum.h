@@ -22,6 +22,11 @@ extern "C"{
 
 extern uint16_t ehip_standard_chksum(const void *dataptr, int len);
 
+static inline uint16_t ehip_inet_chksum(const void *dataptr, int len)
+{
+    return ~ehip_standard_chksum(dataptr, len);
+}
+
 #ifdef __cplusplus
 #if __cplusplus
 }

@@ -21,16 +21,16 @@
 #include <eh_signal.h>
 #include <eh_timer.h>
 #include <ehip_core.h>
-#include <ehip-ipv4/route.h>
 #include <ehip_netdev.h>
 #include <ehip_module.h>
 #include <ehip_buffer.h>
 #include <ehip_netdev_type.h>
 #include <ehip_protocol_handle.h>
 #include <ehip_netdev_trait.h>
+#include <ehip-mac/ethernet.h>
+#include <ehip-ipv4/route.h>
 #include <ehip-ipv4/arp.h>
 #include <ehip-ipv4/ip.h>
-#include <ehip-mac/ethernet.h>
 
 EH_DEFINE_SIGNAL(signal_arp_table_changed);
 struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM];
@@ -401,6 +401,7 @@ static void arp_handle(struct ehip_buffer* buf){
     arp_pos += arp_hdr->ar_hln;
     memcpy(&d_ipv4_addr, arp_pos, sizeof(ipv4_addr_t));
 
+#if EHIP_ARP_DEBUG
     eh_debugfl("ar_hrd: %04hx", arp_hdr->ar_hrd);
     eh_debugfl("ar_pro: %04hx", arp_hdr->ar_pro);
     eh_debugfl("ar_hln: %02hhx", arp_hdr->ar_hln);
@@ -414,6 +415,9 @@ static void arp_handle(struct ehip_buffer* buf){
     eh_debugfl("d_ip: %d.%d.%d.%d", 
         ipv4_addr_to_dec0(d_ipv4_addr), ipv4_addr_to_dec1(d_ipv4_addr),
         ipv4_addr_to_dec2(d_ipv4_addr), ipv4_addr_to_dec3(d_ipv4_addr));
+#else
+    (void)d_hw_addr;
+#endif
 
 	if(eh_unlikely(ipv4_is_multicast(d_ipv4_addr)))
         goto drop;

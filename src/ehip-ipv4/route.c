@@ -9,19 +9,19 @@
  */
  
 
-#include "ehip_netdev_trait.h"
 #include <eh.h>
+#include <stdint.h>
 #include <eh_error.h>
 #include <eh_list.h>
 #include <eh_signal.h>
 #include <eh_event_flags.h>
 #include <eh_mem.h>
 
+#include <ehip_netdev_trait.h>
 #include <ehip_netdev.h>
 #include <ehip_module.h>
 #include <ehip-ipv4/route.h>
 #include <ehip-ipv4/ip.h>
-#include <stdint.h>
 
 static struct eh_list_head      route_head;
 static size_t                   route_cnt;
@@ -159,7 +159,7 @@ enum route_table_type ipv4_route_input(ipv4_addr_t src_addr, ipv4_addr_t dst_add
     struct ipv4_netdev *ipv4_dev;
     
     /* 检查源地址的合法性 */
-    if(ipv4_is_multicast(src_addr) || ipv4_is_zeronet(src_addr) || ipv4_is_linklocal_169(src_addr)){
+    if(ipv4_is_multicast(src_addr) || ipv4_is_linklocal_169(src_addr)){
         ret = ROUTE_TABLE_UNREACHABLE;
         goto out;
     }

@@ -53,6 +53,21 @@
 #endif
 
 /**
+ *  IPV4最大支持分配的数据包数量
+ */
+#ifndef EHIP_IP_MAX_BUFFER_NUM
+#define EHIP_IP_MAX_BUFFER_NUM                                  16U
+#endif
+
+/*
+ *  IPV4支持同一时间分片重组最大数
+ */
+#ifndef EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM
+#define EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM                      8U
+#endif
+
+
+/**
  *  内存池基础数据结构对齐
  */
 #ifndef EHIP_POOL_BASE_ALIGN
@@ -103,5 +118,22 @@
 #define EHIP_ARP_REACHABLE_TIME                                 300U
 #endif
 
+#ifndef EHIP_ARP_DEBUG
+#define EHIP_ARP_DEBUG                                          0U
+#endif
+
+#ifndef EHIP_IP_DEBUG
+#define EHIP_IP_DEBUG                                           0U
+#endif
+
+#ifndef EHIP_ETHERNET_V2_DEBUG
+#define EHIP_ETHERNET_V2_DEBUG                                  0U
+#endif
+
+
+/* 最大IP分片数 */
+#ifndef EHIP_IP_MAX_FRAGMENT_NUM
+#define EHIP_IP_MAX_FRAGMENT_NUM                                4U
+#endif
 
 #endif // _EHIP_CONF_H_
