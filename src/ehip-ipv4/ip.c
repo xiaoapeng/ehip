@@ -36,8 +36,8 @@ int ip_fragment_find(const struct ip_message *ip_msg_ref){
             continue;
         }
         if( ip_fragment_reasse_tab[i]->ip_hdr->id == ip_msg_ref->ip_hdr->id  && 
-            ip_fragment_reasse_tab[i]->src_ip == ip_msg_ref->src_ip &&
-            ip_fragment_reasse_tab[i]->dst_ip == ip_msg_ref->dst_ip &&
+            ip_fragment_reasse_tab[i]->ip_hdr->src_addr == ip_msg_ref->ip_hdr->src_addr &&
+            ip_fragment_reasse_tab[i]->ip_hdr->dst_addr == ip_msg_ref->ip_hdr->dst_addr &&
             ip_fragment_reasse_tab[i]->ip_hdr->protocol == ip_msg_ref->ip_hdr->protocol
         ){
             return i;
@@ -63,11 +63,26 @@ int ip_fragment_find(const struct ip_message *ip_msg_ref){
  */
 static struct ip_message * ip_reasse(struct ip_message *ip_msg){
     int index = ip_fragment_find(ip_msg);
+    int ret;
     if(index < 0){
         ip_message_and_buffer_free(ip_msg);
         return NULL;
     }
+
     /* TODO: */
+    if(ip_fragment_reasse_tab[index] == NULL){
+        ret = ip_message_convert_to_fragment(ip_msg);
+        if(ret < 0){
+            ip_message_and_buffer_free(ip_msg);
+        }else{
+            ip_fragment_reasse_tab[index] = ip_msg;
+        }
+        return NULL;
+    }
+
+
+
+
     return NULL;
 }
 
@@ -79,6 +94,8 @@ static void ip_handle(struct ehip_buffer* buf){
     struct route_info next_hop;
     enum route_table_type route_type;
     struct ipv4_netdev *ipv4_dev;
+    ipv4_addr_t  src_addr;
+    ipv4_addr_t  dst_addr;
 
     
     ipv4_dev = ehip_netdev_trait_ipv4_dev(buf->netdev);
@@ -96,21 +113,21 @@ static void ip_handle(struct ehip_buffer* buf){
 
     if(eh_unlikely(ehip_inet_chksum(ip_hdr, ip_hdr->ihl << 2) != 0))
         goto drop;
-    ip_message = ip_message_new(IP_MESSAGE_TYPE_NORMAL);
+    ip_message = ip_message_new();
     if(ip_message == NULL)
         goto drop;
     ip_message->ip_hdr = ip_hdr;
-    ip_message->src_ip = ip_hdr->src_addr;
-    ip_message->dst_ip = ip_hdr->dst_addr;
     ip_message->buffer = buf;
+    src_addr = ip_hdr->src_addr;
+    dst_addr = ip_hdr->dst_addr;
 
 #if EHIP_IP_DEBUG
     eh_debugfl("src: %d.%d.%d.%d", 
-        ipv4_addr_to_dec0(ip_message->src_ip), ipv4_addr_to_dec1(ip_message->src_ip),
-        ipv4_addr_to_dec2(ip_message->src_ip), ipv4_addr_to_dec3(ip_message->src_ip));
+        ipv4_addr_to_dec0(src_addr), ipv4_addr_to_dec1(src_addr),
+        ipv4_addr_to_dec2(src_addr), ipv4_addr_to_dec3(src_addr));
     eh_debugfl("dst: %d.%d.%d.%d", 
-        ipv4_addr_to_dec0(ip_message->dst_ip), ipv4_addr_to_dec1(ip_message->dst_ip),
-        ipv4_addr_to_dec2(ip_message->dst_ip), ipv4_addr_to_dec3(ip_message->dst_ip));
+        ipv4_addr_to_dec0(dst_addr), ipv4_addr_to_dec1(dst_addr),
+        ipv4_addr_to_dec2(dst_addr), ipv4_addr_to_dec3(dst_addr));
     eh_debugfl("tos:%02x", ip_hdr->tos);
     eh_debugfl("iphdr_len:%d", iphdr_len);
     eh_debugfl("id:%d", eh_ntoh16(ip_hdr->id));
@@ -122,7 +139,7 @@ static void ip_handle(struct ehip_buffer* buf){
     /*
      *  判断本包的目的地址类型
      */
-    route_type = ipv4_route_input(ip_message->src_ip, ip_message->dst_ip, buf->netdev, &next_hop);
+    route_type = ipv4_route_input(src_addr, dst_addr, buf->netdev, &next_hop);
     switch(route_type){
         case ROUTE_TABLE_UNREACHABLE:
             goto ip_message_drop;
@@ -146,7 +163,7 @@ static void ip_handle(struct ehip_buffer* buf){
     }
     
     /* 进行分片组合 */
-    if((ip_hdr->frag_off & eh_ntoh(IP_FRAG_OFFMASK|IP_FRAG_MF)) != 0){
+    if(ipv4_hdr_mf(ip_hdr)){
         ip_message = ip_reasse(ip_message);
         if(ip_message == NULL)
             return ;

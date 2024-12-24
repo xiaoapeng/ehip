@@ -84,8 +84,10 @@ struct ip_hdr{
     ipv4_addr_t                 dst_addr;
 }eh_aligned(1);
 
-
-
+#define ipv4_hdr_offset(hdr) ((uint16_t)((eh_ntoh16((hdr)->frag_off) & IP_FRAG_OFFMASK) << 3))
+#define ipv4_hdr_body_len(hdr) (eh_ntoh16((hdr)->tot_len) - (uint16_t)((hdr)->ihl << 2))
+#define ipv4_hdr_total_len(hdr) (eh_ntoh16((hdr)->tot_len))
+#define ipv4_hdr_mf(hdr) (!!((hdr)->frag_off & eh_ntoh(IP_FRAG_OFFMASK|IP_FRAG_MF)))
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)(0xffffffffU >> (32 - (mask_len))))

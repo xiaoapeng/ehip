@@ -136,4 +136,10 @@
 #define EHIP_IP_MAX_FRAGMENT_NUM                                4U
 #endif
 
+/* IP分片超时时间, 最大255 */
+#ifndef EHIP_IP_FRAGMENT_TIMEOUT
+#define EHIP_IP_FRAGMENT_TIMEOUT                                15
+#endif
+
+
 #endif // _EHIP_CONF_H_

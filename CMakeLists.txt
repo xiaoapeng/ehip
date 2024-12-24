@@ -15,6 +15,7 @@ target_sources(ehip PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ip_dev.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ip.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/route.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ip_message.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip_chksum.c"
 )
 
