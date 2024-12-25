@@ -89,10 +89,96 @@ int ip_message_convert_to_fragment(struct ip_message *msg){
 }
 
 int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_msg){
+    ehip_buffer_t *buffer_ptr;
+    uint16_t fragment_start_offset;
+    uint16_t fragment_end_offset;
+    uint16_t fragment_check_offset;
+    struct ip_hdr *new_msg_ip_hdr;
+    struct fragment_info *prev_fragment_msg;
+    struct fragment_info *fragment_msg;
+    int sort_i, ret;
+
     if(fragment->fragment_num == 0 || new_msg->fragment_num > 0)
         return EH_RET_INVALID_PARAM;
-    /* 插入 TODO */
-    return EH_RET_INVALID_PARAM;
+
+    buffer_ptr = ehip_buffer_ref_dup(new_msg->buffer);
+    new_msg_ip_hdr = new_msg->ip_hdr;
+
+    fragment_start_offset = ipv4_hdr_offset(new_msg->ip_hdr);
+    fragment_end_offset = (uint16_t)(ipv4_hdr_offset(new_msg->ip_hdr) + ipv4_hdr_body_len(new_msg->ip_hdr));
+
+    if(ipv4_hdr_mf(new_msg_ip_hdr)){
+        /* 
+         * 中间的发片必须以8字对齐 
+         * 或者分片数量达到最大值时还没有得到最后一块分片
+         */
+        if( ipv4_hdr_total_len(new_msg_ip_hdr) & 0x7 || 
+            (fragment->fragment->ip_hdr.tot_len == 0 && fragment->fragment_num + 1 >= EHIP_IP_MAX_FRAGMENT_NUM) ){
+                ret = EH_RET_INVALID_STATE;
+                goto quit;
+            }
+    }else{
+        /* 最后一个分片报文 */
+        if( fragment->ip_hdr->tot_len ){
+            /* 重复接收到最后一片报文 */
+            ret = EH_RET_INVALID_STATE;
+            goto quit;
+        }
+        fragment->ip_hdr->tot_len = 
+            (uint16_be_t)(ipv4_hdr_offset(new_msg_ip_hdr) + ipv4_hdr_body_len(new_msg_ip_hdr));
+    }
+
+    fragment->fragment->fragment_info[fragment->fragment_num].fragment_buffer = buffer_ptr;
+    fragment->fragment->fragment_info[fragment->fragment_num].fragment_start_offset = fragment_start_offset;
+    fragment->fragment->fragment_info[fragment->fragment_num].fragment_end_offset = fragment_end_offset;
+
+    prev_fragment_msg = NULL;
+    for(    int i = 0; 
+            i < fragment->fragment_num; 
+            i++, prev_fragment_msg = fragment_msg   ){
+        sort_i = fragment->fragment->fragment_sort[i];
+        fragment_msg = fragment->fragment->fragment_info + sort_i;
+
+        if( fragment_end_offset > fragment_msg->fragment_start_offset )
+            continue;
+
+        if( prev_fragment_msg == NULL || 
+            fragment_start_offset < prev_fragment_msg->fragment_end_offset 
+        ){
+            /* 两片报文出现重叠 */
+            ret = EH_RET_INVALID_STATE;
+            goto quit;
+        }
+        /* 
+         * 找到了合适的位置，准备插入，
+         * 先整体后移，再插入 
+         */
+        for(    int j = fragment->fragment_num; 
+                j > i; 
+                j-- ){
+            fragment->fragment->fragment_sort[j] = fragment->fragment->fragment_sort[j - 1];
+        }
+        fragment->fragment->fragment_sort[i] = fragment->fragment_num;
+        break;
+    }
+    fragment->expires_cd = EHIP_IP_FRAGMENT_TIMEOUT;
+    fragment->fragment_num++;
+    /* 插入成功后，检查是否已经拿到了尾部，若拿到了尾部，则进行完整性检测*/
+    if(fragment->ip_hdr->tot_len == 0)
+        return 0;
+    fragment_check_offset = 0;
+    for(int i=0; i < fragment->fragment_num; i++){
+        sort_i = fragment->fragment->fragment_sort[i];
+        fragment_msg = fragment->fragment->fragment_info + sort_i;
+        if(fragment_check_offset != fragment_msg->fragment_start_offset)
+            return 0;
+        fragment_check_offset = fragment_msg->fragment_end_offset;
+    }
+
+    return 1;
+quit:
+    ehip_buffer_free(buffer_ptr);
+    return ret;
 }
 
 static int __init ip_message_pool_init(void)

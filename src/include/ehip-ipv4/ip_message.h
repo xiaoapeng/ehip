@@ -30,7 +30,7 @@ typedef struct ehip_buffer ehip_buffer_t;
 struct ip_fragment{
     struct ip_hdr    ip_hdr;
     uint8_t         fragment_sort[EHIP_IP_MAX_FRAGMENT_NUM];
-    struct{
+    struct fragment_info{
         ehip_buffer_t      *fragment_buffer;
         uint16_t            fragment_start_offset;
         uint16_t            fragment_end_offset;
@@ -71,11 +71,12 @@ extern int ip_message_convert_to_fragment(struct ip_message *msg);
 /**
  * @brief                将一个ip_message_t 结构体添加到分片的 ip_message_t 结构体中
  * @param  fragment      要添加的分片片段的 ip_message_t 结构体
- * @param  new_msg       要添加到的分片片段的 ip_message_t 结构体,
+ * @param  new_msg_ref       要添加到的分片片段的 ip_message_t 结构体,
 *                          无论成功还是失败，本函数不对new_msg的空间做任何改变，需要自己调用ip_message_and_buffer_free释放
- * @return int           成功返回0，失败返回负数
+ * @return int           成功返回0，重组完成返回 FRAGMENT_REASSE_FINISH, 失败返回负数
  */
-extern int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_msg);
+#define FRAGMENT_REASSE_FINISH  1
+extern int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_msg_ref);
 
 
 /**

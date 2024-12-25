@@ -35,7 +35,7 @@
  *  POLL BUFFER 句柄最大数量，要大于 EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_NUM
  */
 #ifndef EHIP_NETDEV_POLL_BUFFER_MAX_NUM 
-#define EHIP_NETDEV_POLL_BUFFER_MAX_NUM                         16U
+#define EHIP_NETDEV_POLL_BUFFER_MAX_NUM                         32U
 #endif
 
 /**

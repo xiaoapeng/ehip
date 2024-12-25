@@ -79,9 +79,18 @@ static struct ip_message * ip_reasse(struct ip_message *ip_msg){
         }
         return NULL;
     }
-
-
-
+    ret = ip_message_add_fragment(ip_fragment_reasse_tab[index], ip_msg);
+    ip_message_and_buffer_free(ip_msg);
+    if(ret < 0){
+        ip_message_and_buffer_free(ip_fragment_reasse_tab[index]);
+        ip_fragment_reasse_tab[index] = NULL;
+        return NULL;
+    }
+    if(ret == FRAGMENT_REASSE_FINISH){
+        struct ip_message *ret_ip_msg = ip_fragment_reasse_tab[index];
+        ip_fragment_reasse_tab[index] = NULL;
+        return ret_ip_msg;
+    }
 
     return NULL;
 }
