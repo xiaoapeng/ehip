@@ -34,7 +34,6 @@
 
 EH_DEFINE_SIGNAL(signal_arp_table_changed);
 struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM];
-EH_DEFINE_STATIC_CUSTOM_SIGNAL(signal_timer_1s, eh_event_timer_t, EH_TIMER_INIT(signal_timer_1s.custom_event));
 
 static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *netdev, 
     const ehip_hw_addr_t *s_hw_addr, const ehip_hw_addr_t *d_hw_addr, 
@@ -100,7 +99,7 @@ static void slot_function_arp_1s_timer_handler(eh_event_t *e, void *slot_param){
     }
 }
 
-EH_DEFINE_SLOT(slot_timer, slot_function_arp_1s_timer_handler, NULL);
+static EH_DEFINE_SLOT(slot_timer, slot_function_arp_1s_timer_handler, NULL);
 
 /* 比较新旧状态，结果可以用来触发 signal_arptable_changed */
 static bool arp_state_is_change(uint8_t old_state, uint8_t new_state){
@@ -555,23 +554,13 @@ static int __init arp_init(void){
     int ret;
     ret = eh_signal_register(&signal_arp_table_changed);
     if(ret < 0) return ret;
-
-    eh_timer_advanced_init(eh_signal_to_custom_event(&signal_timer_1s), (eh_sclock_t)eh_msec_to_clock(1000*1), EH_TIMER_ATTR_AUTO_CIRCULATION);
-    ret = eh_signal_register(&signal_timer_1s);
-    if(ret < 0) goto signal_timer_1s_register_error;
-    eh_signal_slot_connect(&signal_timer_1s, &slot_timer);
-    eh_timer_start(eh_signal_to_custom_event(&signal_timer_1s));
+    eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
     memset(&_arp_table, 0, sizeof(_arp_table));
     return 0;
-signal_timer_1s_register_error:
-    eh_signal_unregister(&signal_arp_table_changed);
-    return ret;
 }
 
 static void __exit arp_exit(void){
-    eh_timer_stop(eh_signal_to_custom_event(&signal_timer_1s));
     eh_signal_slot_disconnect(&slot_timer);
-    eh_signal_unregister(&signal_timer_1s);
     eh_signal_unregister(&signal_arp_table_changed);
     /* 避免connect signal_arptable_changed的任务继续运行导致的问题 */
     eh_signal_clean(&signal_arp_table_changed);

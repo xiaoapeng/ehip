@@ -10,13 +10,15 @@
 #include <string.h>
 #include <eh_error.h>
 #include <eh_mem_pool.h>
+#include <eh_types.h>
+#include <eh_debug.h>
 #include <ehip_buffer.h>
 #include <ehip_module.h>
 #include <ehip-ipv4/ip.h>
 #include <ehip-ipv4/ip_message.h>
 
 
-
+eh_static_assert(EHIP_IP_MAX_FRAGMENT_NUM <= 255, "EHIP_IP_MAX_FRAGMENT_NUM must be less than 8");
 
 static eh_mem_pool_t ip_message_pool;
 static eh_mem_pool_t ip_fragment_pool;
@@ -59,16 +61,17 @@ int ip_message_convert_to_fragment(struct ip_message *msg){
     fragment->ip_hdr.ihl = msg->ip_hdr->ihl;
     fragment->ip_hdr.version = msg->ip_hdr->version;
     fragment->ip_hdr.tos = msg->ip_hdr->tos;
-    if(!ipv4_hdr_mf(&fragment->ip_hdr)){
+    /* 如果mf置位那么说明是中间报文 */
+    if(ipv4_hdr_is_mf(msg->ip_hdr)){
+        /* 如果没有收到最后一个分片数据，那就设置为0 */
+        fragment->ip_hdr.tot_len = 0; /* 当此成员为 */
+    }else{
         /* 
          * 如果最后一个分片数据，那就通过该分片数据得到最终的数据包长度，
          * 此时，该成员以主机字节序来存储，而且不包含头部大小，当
          * 当能收到完整的IP分片后，将转换为网络字节序，并且会算上头部的大小
          */
         fragment->ip_hdr.tot_len = (uint16_be_t)(ipv4_hdr_offset(msg->ip_hdr) + ipv4_hdr_body_len(msg->ip_hdr));
-    }else{
-        /* 如果没有收到最后一个分片数据，那就设置为0 */
-        fragment->ip_hdr.tot_len = 0; /* 当此成员为 */
     }
     fragment->ip_hdr.id = msg->ip_hdr->id;
     fragment->ip_hdr.frag_off = 0;
@@ -96,7 +99,8 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
     struct ip_hdr *new_msg_ip_hdr;
     struct fragment_info *prev_fragment_msg;
     struct fragment_info *fragment_msg;
-    int sort_i, ret;
+    int sort_i, ret, install_index;
+    
 
     if(fragment->fragment_num == 0 || new_msg->fragment_num > 0)
         return EH_RET_INVALID_PARAM;
@@ -107,22 +111,34 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
     fragment_start_offset = ipv4_hdr_offset(new_msg->ip_hdr);
     fragment_end_offset = (uint16_t)(ipv4_hdr_offset(new_msg->ip_hdr) + ipv4_hdr_body_len(new_msg->ip_hdr));
 
-    if(ipv4_hdr_mf(new_msg_ip_hdr)){
+    if(ipv4_hdr_is_mf(new_msg_ip_hdr)){
         /* 
-         * 中间的发片必须以8字对齐 
+         * 中间的分片必须以8字对齐 
          * 或者分片数量达到最大值时还没有得到最后一块分片
          */
-        if( ipv4_hdr_total_len(new_msg_ip_hdr) & 0x7 || 
-            (fragment->fragment->ip_hdr.tot_len == 0 && fragment->fragment_num + 1 >= EHIP_IP_MAX_FRAGMENT_NUM) ){
-                ret = EH_RET_INVALID_STATE;
-                goto quit;
-            }
+        if( ipv4_hdr_total_len(new_msg_ip_hdr) & 0x7 ){
+            /* ip中间的分片没有向8字节对齐 */
+            eh_debugfl("Ip fragment not align 8.");
+            ret = EH_RET_INVALID_STATE;
+            goto drop;
+        }
+
+        if(fragment->fragment->ip_hdr.tot_len == 0 && fragment->fragment_num + 1 >= (uint8_t)EHIP_IP_MAX_FRAGMENT_NUM){
+            /* 
+             * 如果分片数量达到最大值时还没有得到最后一块分片
+             * 那么就不再接收新的分片
+             */
+            eh_debugfl("Ip fragment max.");
+            ret = EH_RET_NOT_SUPPORTED;
+            goto drop;
+        }
     }else{
         /* 最后一个分片报文 */
         if( fragment->ip_hdr->tot_len ){
             /* 重复接收到最后一片报文 */
-            ret = EH_RET_INVALID_STATE;
-            goto quit;
+            eh_debugfl("Ip fragment repeat.");
+            ret = EH_RET_OK;
+            goto drop;
         }
         fragment->ip_hdr->tot_len = 
             (uint16_be_t)(ipv4_hdr_offset(new_msg_ip_hdr) + ipv4_hdr_body_len(new_msg_ip_hdr));
@@ -133,10 +149,10 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
     fragment->fragment->fragment_info[fragment->fragment_num].fragment_end_offset = fragment_end_offset;
 
     prev_fragment_msg = NULL;
-    for(    int i = 0; 
-            i < fragment->fragment_num; 
-            i++, prev_fragment_msg = fragment_msg   ){
-        sort_i = fragment->fragment->fragment_sort[i];
+    for( install_index = 0; 
+            install_index < fragment->fragment_num; 
+            install_index++, prev_fragment_msg = fragment_msg   ){
+        sort_i = fragment->fragment->fragment_sort[install_index];
         fragment_msg = fragment->fragment->fragment_info + sort_i;
 
         if( fragment_end_offset > fragment_msg->fragment_start_offset )
@@ -145,22 +161,23 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
         if( prev_fragment_msg == NULL || 
             fragment_start_offset < prev_fragment_msg->fragment_end_offset 
         ){
-            /* 两片报文出现重叠 */
-            ret = EH_RET_INVALID_STATE;
-            goto quit;
+            /* 两片报文出现重叠或者重复 */
+            eh_debugfl("Ip fragment repeat.");
+            ret = EH_RET_OK;
+            goto drop;
         }
         /* 
          * 找到了合适的位置，准备插入，
          * 先整体后移，再插入 
          */
         for(    int j = fragment->fragment_num; 
-                j > i; 
+                j > install_index; 
                 j-- ){
             fragment->fragment->fragment_sort[j] = fragment->fragment->fragment_sort[j - 1];
         }
-        fragment->fragment->fragment_sort[i] = fragment->fragment_num;
         break;
     }
+    fragment->fragment->fragment_sort[install_index] = fragment->fragment_num;
     fragment->expires_cd = EHIP_IP_FRAGMENT_TIMEOUT;
     fragment->fragment_num++;
     /* 插入成功后，检查是否已经拿到了尾部，若拿到了尾部，则进行完整性检测*/
@@ -174,9 +191,10 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
             return 0;
         fragment_check_offset = fragment_msg->fragment_end_offset;
     }
+    fragment->ip_hdr->tot_len = eh_hton16(fragment_check_offset);
 
-    return 1;
-quit:
+    return FRAGMENT_REASSE_FINISH;
+drop:
     ehip_buffer_free(buffer_ptr);
     return ret;
 }
