@@ -18,12 +18,25 @@
 #include <ehip-ipv4/ip_message.h>
 
 
-eh_static_assert(EHIP_IP_MAX_FRAGMENT_NUM <= 255, "EHIP_IP_MAX_FRAGMENT_NUM must be less than 8");
+eh_static_assert(EHIP_IP_MAX_FRAGMENT_NUM < 0xFE, "IP fragment number must less than 0xFE");
+
+/* 当fragment_num为 0xFF时，说明这个分片的ip报文已经破碎了，该状态存在的唯一意义就是防止剩下的分片进入 */
+#define IP_MESSAGE_FRAGMENT_BROKEN_VALUE  0xFF
+
+#define ip_message_is_broken(msg)   ((msg)->fragment_num == IP_MESSAGE_FRAGMENT_BROKEN_VALUE)
 
 static eh_mem_pool_t ip_message_pool;
 static eh_mem_pool_t ip_fragment_pool;
 
 
+static void ip_message_fragment_boroken(struct ip_message *msg){
+    int i, sort_i;
+    ehip_buffer_t *pos_buffer;
+    ip_message_fragment_for_each(pos_buffer, i, sort_i, msg){
+        ehip_buffer_free(pos_buffer);
+    }
+    msg->fragment_num = IP_MESSAGE_FRAGMENT_BROKEN_VALUE;
+}
 struct ip_message *ip_message_new(void){
     struct ip_message * new_msg =  eh_mem_pool_alloc(ip_message_pool);
     if(new_msg == NULL)
@@ -32,9 +45,10 @@ struct ip_message *ip_message_new(void){
     return new_msg;
 }
 
-void ip_message_and_buffer_free(struct ip_message *msg){
-
-    if(msg->fragment_num > 0){
+void ip_message_free_and_buffer_clean(struct ip_message *msg){
+    if(eh_unlikely(ip_message_is_broken(msg))){
+        eh_mem_pool_free(ip_fragment_pool, msg->fragment);
+    }else if(msg->fragment_num > 0){
         int i, sort_i;
         ehip_buffer_t *pos_buffer;
         ip_message_fragment_for_each(pos_buffer, i, sort_i, msg){
@@ -50,7 +64,7 @@ void ip_message_and_buffer_free(struct ip_message *msg){
 
 
 int ip_message_convert_to_fragment(struct ip_message *msg){
-    if(msg->fragment_num > 0)
+    if(msg->fragment_num > 0 || ip_message_is_broken(msg))
         return 0;
     struct ip_fragment *fragment;
     if(msg->buffer == NULL || msg->ip_hdr == NULL) 
@@ -104,7 +118,12 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
 
     if(fragment->fragment_num == 0 || new_msg->fragment_num > 0)
         return EH_RET_INVALID_PARAM;
-
+    
+    if(ip_message_is_broken(fragment)){
+        fragment->expires_cd = EHIP_IP_FRAGMENT_TIMEOUT/2;
+        return 0;
+    }
+    
     buffer_ptr = ehip_buffer_ref_dup(new_msg->buffer);
     new_msg_ip_hdr = new_msg->ip_hdr;
 
@@ -116,7 +135,7 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
          * 中间的分片必须以8字对齐 
          * 或者分片数量达到最大值时还没有得到最后一块分片
          */
-        if( ipv4_hdr_total_len(new_msg_ip_hdr) & 0x7 ){
+        if( ipv4_hdr_body_len(new_msg_ip_hdr) & 0x7 ){
             /* ip中间的分片没有向8字节对齐 */
             eh_debugfl("Ip fragment not align 8.");
             ret = EH_RET_INVALID_STATE;
@@ -129,7 +148,9 @@ int ip_message_add_fragment(struct ip_message *fragment, struct ip_message *new_
              * 那么就不再接收新的分片
              */
             eh_debugfl("Ip fragment max.");
-            ret = EH_RET_NOT_SUPPORTED;
+            ip_message_fragment_boroken(fragment);
+            fragment->expires_cd = EHIP_IP_FRAGMENT_TIMEOUT/2;
+            ret = EH_RET_OK;
             goto drop;
         }
     }else{

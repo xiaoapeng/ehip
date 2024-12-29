@@ -21,7 +21,7 @@
  * 以太网帧内存块数量
  */
 #ifndef EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_NUM
-#define EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_NUM               6U
+#define EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_NUM               12U
 #endif
 
 /**

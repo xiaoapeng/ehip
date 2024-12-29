@@ -39,6 +39,7 @@ struct ip_fragment{
 
 eh_static_assert(eh_offsetof(struct ip_fragment, ip_hdr) == 0, "ip_hdr must be the first member of ip_fragment");
 
+
 struct ip_message{
     union{
         struct ip_hdr               *ip_hdr;
@@ -59,7 +60,7 @@ extern struct ip_message* ip_message_new(void);
  * @brief     释放一个 ip_message_t 结构体,若内部拥有ehip_buffer_t 则一同解除引用
  * @param  msg                 要释放的 ip_message_t 结构体
  */
-extern void ip_message_and_buffer_free(struct ip_message *msg);
+extern void ip_message_free_and_buffer_clean(struct ip_message *msg);
 
 /**
  * @brief     将一个普通的 ip_message_t 结构体转换为一个分片片段的 ip_message_t 结构体
