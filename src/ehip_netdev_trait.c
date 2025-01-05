@@ -96,6 +96,13 @@ int ehip_netdev_trait_hard_header(ehip_netdev_t *netdev, ehip_buffer_t *buf,
     return EH_RET_NOT_SUPPORTED;
 }
 
+int ehip_netdev_trait_buffer_padding(ehip_netdev_t *netdev, ehip_buffer_t *buf){
+    const struct ehip_netdev_trait_ops * ops = type_tab[netdev->type];
+    if(ops && ops->buffer_padding)
+        return ops->buffer_padding(netdev, buf);
+    return EH_RET_NOT_SUPPORTED;
+}
+
 int ehip_netdev_trait_change(ehip_netdev_t *netdev, const void *type_ptr, const void *src_ptr){
     const struct ehip_netdev_trait_ops * ops = type_tab[netdev->type];
     if(ops && ops->change){

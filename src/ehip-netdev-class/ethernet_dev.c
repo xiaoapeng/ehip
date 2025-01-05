@@ -8,13 +8,16 @@
  * 
  */
 
-#include "ehip-ipv4/ip.h"
+
 #include <string.h>
 
 #include <eh_error.h>
 #include <eh_types.h>
+
+#include <ehip_buffer.h>
 #include <ehip_module.h>
 #include <ehip_ptype.h>
+#include <ehip-ipv4/ip.h>
 
 #include <ehip-netdev-class/ethernet_dev.h>
 
@@ -28,6 +31,8 @@ static int  ethernet_dev_trait_change(ehip_netdev_t *netdev, const void *type_pt
 static int  ethernet_dev_trait_hard_header(ehip_netdev_t *netdev, ehip_buffer_t *buf, 
     const ehip_hw_addr_t *src_hw_addr, const ehip_hw_addr_t *dst_hw_addr, 
     enum ehip_ptype ptype, ehip_buffer_size_t len);
+static int ethernet_dev_trait_buffer_padding(ehip_netdev_t *netdev, ehip_buffer_t *buf);
+
 const struct ehip_netdev_trait_ops ethernet_dev_trait_ops = {
     .trait_size = sizeof(struct ethernet_trait),
     .up = ethernet_dev_trait_up,
@@ -35,6 +40,7 @@ const struct ehip_netdev_trait_ops ethernet_dev_trait_ops = {
     .reset = ethernet_dev_trait_reset,
     .change = ethernet_dev_trait_change,
     .hard_header = ethernet_dev_trait_hard_header,
+    .buffer_padding = ethernet_dev_trait_buffer_padding,
     .hw_addr_offset = ehip_netdev_trait_offsetof(struct ethernet_trait, hw_addr),
     .mac_ptype_offset = ehip_netdev_trait_offsetof(struct ethernet_trait, mac_ptype),
     .ipv4_dev_offset = ehip_netdev_trait_offsetof(struct ethernet_trait, ipv4_netdev),
@@ -137,6 +143,23 @@ static int  ethernet_dev_trait_hard_header(ehip_netdev_t *netdev, ehip_buffer_t 
     eth_hdr->type_or_len = (uint16_t)ptype;
     return EH_RET_OK;
 }
+
+static int ethernet_dev_trait_buffer_padding(ehip_netdev_t *netdev, ehip_buffer_t *buf){
+    (void)netdev;
+    uint8_t *padding_ptr;
+    ehip_buffer_size_t padding_size;
+    if(ehip_buffer_get_payload_size(buf) >= (EHIP_ETH_FRAME_MIN_LEN - EHIP_ETH_FRAME_CRC_LEN))
+        return EH_RET_OK;
+    padding_size = EHIP_ETH_FRAME_MIN_LEN - EHIP_ETH_FRAME_CRC_LEN - ehip_buffer_get_payload_size(buf);
+
+    padding_ptr = ehip_buffer_payload_append(buf, padding_size);
+    if(padding_ptr){
+        memset(padding_ptr, 0, padding_size);
+        return EH_RET_OK;
+    }
+    return EH_RET_INVALID_STATE;
+}
+
 
 static int __init ethernet_dev_trait_init(void)
 {

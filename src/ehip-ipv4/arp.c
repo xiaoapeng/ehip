@@ -200,6 +200,10 @@ static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *
     pos += netdev->attr.hw_addr_len;
     memcpy(pos, &d_ipv4_addr, 4);
 
+    ret = ehip_netdev_trait_buffer_padding(netdev, newbuf);
+    if(ret < 0)
+        goto error;
+
     ehip_queue_tx(newbuf);
 
     return 0;
@@ -464,6 +468,12 @@ drop:
 
 int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_idx_or_minus){
     int idx;
+    struct ipv4_netdev* ipv4_dev;
+    
+    ipv4_dev = ehip_netdev_trait_ipv4_dev((ehip_netdev_t *)netdev);
+    if(ipv4_dev == NULL || !ipv4_netdev_flags_is_arp_support(ipv4_dev))
+        return EH_RET_INVALID_PARAM;
+
     if(old_idx_or_minus >= 0 && old_idx_or_minus < (int)EHIP_ARP_CACHE_MAX_NUM && 
         _arp_table[old_idx_or_minus].ip_addr == ip_addr && _arp_table[old_idx_or_minus].netdev == netdev && 
         _arp_table[old_idx_or_minus].state != ARP_STATE_NUD_FAILED){
@@ -474,7 +484,7 @@ int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_id
     idx = arp_find_entry((ehip_netdev_t *)netdev, ip_addr, true);
     if(idx < 0)
         return idx;
-    
+
     /* 邻居项有效 */
 valid:
     if(_arp_table[idx].state < ARP_STATE_NUD_STALE){
