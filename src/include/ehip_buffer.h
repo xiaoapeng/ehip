@@ -153,6 +153,17 @@ extern ehip_buffer_t* ehip_buffer_ref_dup(ehip_buffer_t* buf);
  */
 extern uint8_t* ehip_buffer_payload_append(ehip_buffer_t* buf, ehip_buffer_size_t size);
 
+
+
+/**
+ * @brief                   减少payload尾部中空间
+ * @param buf               缓冲句柄
+ * @param size              需要减少的空间大小
+ * @return uint8_t*         返回被移除的空间的开始指针，如果失败返回NULL
+ */
+extern uint8_t* ehip_buffer_payload_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size);
+
+
 /**
  * @brief                   向缓冲区头部追加数据
  * @param buf               缓冲句柄
