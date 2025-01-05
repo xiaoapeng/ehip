@@ -43,6 +43,7 @@ struct ehip_netdev_trait_ops{
     int (*hard_header)(ehip_netdev_t *netdev, ehip_buffer_t *buf, 
         const ehip_hw_addr_t *src_hw_addr, const ehip_hw_addr_t *dst_hw_addr, 
         enum ehip_ptype ptype, ehip_buffer_size_t len);
+    int (*buffer_padding)(ehip_netdev_t *netdev, ehip_buffer_t *buf);
     uint16_t hw_addr_offset;
     uint16_t mac_ptype_offset;
     uint16_t ipv4_dev_offset;
@@ -110,6 +111,14 @@ extern int ehip_netdev_trait_hard_header(ehip_netdev_t *netdev, ehip_buffer_t *b
     const ehip_hw_addr_t *src_hw_addr, const ehip_hw_addr_t *dst_hw_addr, 
     enum ehip_ptype ptype, ehip_buffer_size_t len);
 
+
+/**
+ * @brief               网卡特征属性buffer_padding,当网络设备发送数据包前调用，对数据包进行尾部填充
+ * @param  netdev       网络设备句柄
+ * @param  buf          ehip_buffer 数据包结构
+ * @return int          0表示成功，负数表示失败
+ */
+extern int ehip_netdev_trait_buffer_padding(ehip_netdev_t *netdev, ehip_buffer_t *buf);
 
 /**
  * @brief                   修改某一个特征
