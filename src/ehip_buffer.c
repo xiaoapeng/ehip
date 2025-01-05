@@ -151,6 +151,17 @@ uint8_t* ehip_buffer_payload_append(ehip_buffer_t* buf, ehip_buffer_size_t size)
     return new_payload_ptr;
 }
 
+
+uint8_t* ehip_buffer_payload_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size){
+    uint8_t *remove_payload_ptr;
+    if((int)ehip_buffer_get_payload_size(buf) < (int)size)
+        return NULL;
+    remove_payload_ptr = ehip_buffer_get_payload_end_ptr(buf) - size;
+    buf->payload_tail -= size;
+    return remove_payload_ptr;
+}
+
+
 uint8_t* ehip_buffer_head_append(ehip_buffer_t* buf, ehip_buffer_size_t size){
     if(buf->payload_pos < size)
         return NULL;
