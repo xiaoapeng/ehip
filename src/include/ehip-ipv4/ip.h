@@ -78,10 +78,19 @@ struct ip_hdr{
 #define IP_FRAG_OFFMASK         0x1fffU         /* mask for fragmenting bits */
     uint16_be_t                 frag_off;       /* 分片和分片偏移 */
     uint8_t                     ttl;
+
+#define IP_PROTO_ICMP    1
+#define IP_PROTO_IGMP    2
+#define IP_PROTO_UDP     17
+#define IP_PROTO_UDPLITE 136
+#define IP_PROTO_TCP     6
+
     uint8_t                     protocol;
     uint16_t                    check;
     ipv4_addr_t                 src_addr;
     ipv4_addr_t                 dst_addr;
+#define IP_OPTIONS_MAX_LEN 40
+    uint8_t                     options[0]; 
 }eh_aligned(1);
 
 #define ipv4_hdr_offset(hdr) ((uint16_t)((eh_ntoh16((hdr)->frag_off) & IP_FRAG_OFFMASK) << 3))

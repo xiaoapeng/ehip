@@ -66,6 +66,11 @@
 #define EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM                      8U
 #endif
 
+#ifndef EHIP_IP_MAX_IP_OPTIONS_BYTES_BUFFER_NUM
+#define EHIP_IP_MAX_IP_OPTIONS_BYTES_BUFFER_NUM                 8U
+#endif
+
+
 
 /**
  *  内存池基础数据结构对齐

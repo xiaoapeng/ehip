@@ -31,7 +31,7 @@
 
 struct ip_message *ip_fragment_reasse_tab[EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM];
 
-int ip_fragment_find(const struct ip_message *ip_msg_ref){
+int ip_fragment_find(const struct ip_hdr *ip_hdr){
     uint8_t old_expires_cd = 0xFF;
     int old_index = -1;             /* 最旧的分片记录号 */
     int null_index = -1;            /* 空闲的分片记录号 */
@@ -42,15 +42,15 @@ int ip_fragment_find(const struct ip_message *ip_msg_ref){
             null_index = i;
             continue;
         }
-        if( ip_fragment_reasse_tab[i]->ip_hdr->id == ip_msg_ref->ip_hdr->id  && 
-            ip_fragment_reasse_tab[i]->ip_hdr->src_addr == ip_msg_ref->ip_hdr->src_addr &&
-            ip_fragment_reasse_tab[i]->ip_hdr->dst_addr == ip_msg_ref->ip_hdr->dst_addr &&
-            ip_fragment_reasse_tab[i]->ip_hdr->protocol == ip_msg_ref->ip_hdr->protocol
+        if( ip_fragment_reasse_tab[i]->ip_hdr.id == ip_hdr->id  && 
+            ip_fragment_reasse_tab[i]->ip_hdr.src_addr == ip_hdr->src_addr &&
+            ip_fragment_reasse_tab[i]->ip_hdr.dst_addr == ip_hdr->dst_addr &&
+            ip_fragment_reasse_tab[i]->ip_hdr.protocol == ip_hdr->protocol
         ){
             return i;
         }
-        if(old_index == -1 || ip_fragment_reasse_tab[i]->expires_cd < old_expires_cd){
-            old_expires_cd = ip_fragment_reasse_tab[i]->expires_cd;
+        if(old_index == -1 || ip_fragment_reasse_tab[i]->rx_fragment->expires_cd < old_expires_cd){
+            old_expires_cd = ip_fragment_reasse_tab[i]->rx_fragment->expires_cd;
             old_index = i;
         }
     }
@@ -58,7 +58,7 @@ int ip_fragment_find(const struct ip_message *ip_msg_ref){
     if(old_index == -1)
         return -1;
     /* 释放空闲的分片记录 */
-    ip_message_free_and_buffer_clean(ip_fragment_reasse_tab[old_index]);
+    ip_message_free(ip_fragment_reasse_tab[old_index]);
     ip_fragment_reasse_tab[old_index] = NULL;
     return old_index;
 }
@@ -68,45 +68,45 @@ int ip_fragment_find(const struct ip_message *ip_msg_ref){
  * @param  ip_msg           My Param doc
  * @return struct ip_message* 
  */
-static struct ip_message * ip_reasse(struct ip_message *ip_msg){
+static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
     int index;
     int ret;
-    if((index = ip_fragment_find(ip_msg)) < 0){
+    if((index = ip_fragment_find(ip_hdr)) < 0){
         eh_errfl("IP fragment buffer is full, drop fragment.");
-        ip_message_free_and_buffer_clean(ip_msg);
+        ehip_buffer_free(buffer);
         return NULL;
     }
     ip_debugfl("ip fragment index:%d", index);
-    ip_debugfl("id:%d", eh_hton16(ip_msg->ip_hdr->id));
+    ip_debugfl("id:%d", eh_hton16(ip_hdr->id));
     ip_debugfl("src:%d.%d.%d.%d -> %d.%d.%d.%d", 
-        ipv4_addr_to_dec0(ip_msg->ip_hdr->src_addr), 
-        ipv4_addr_to_dec1(ip_msg->ip_hdr->src_addr), 
-        ipv4_addr_to_dec2(ip_msg->ip_hdr->src_addr), 
-        ipv4_addr_to_dec3(ip_msg->ip_hdr->src_addr), 
-        ipv4_addr_to_dec0(ip_msg->ip_hdr->dst_addr), 
-        ipv4_addr_to_dec1(ip_msg->ip_hdr->dst_addr), 
-        ipv4_addr_to_dec2(ip_msg->ip_hdr->dst_addr), 
-        ipv4_addr_to_dec3(ip_msg->ip_hdr->dst_addr)
+        ipv4_addr_to_dec0(ip_hdr->src_addr), 
+        ipv4_addr_to_dec1(ip_hdr->src_addr), 
+        ipv4_addr_to_dec2(ip_hdr->src_addr), 
+        ipv4_addr_to_dec3(ip_hdr->src_addr), 
+        ipv4_addr_to_dec0(ip_hdr->dst_addr), 
+        ipv4_addr_to_dec1(ip_hdr->dst_addr), 
+        ipv4_addr_to_dec2(ip_hdr->dst_addr), 
+        ipv4_addr_to_dec3(ip_hdr->dst_addr)
     );
-    ip_debugfl("start offset:%d",ipv4_hdr_offset(ip_msg->ip_hdr));
-    ip_debugfl("end offset:%d",ipv4_hdr_offset(ip_msg->ip_hdr) + ipv4_hdr_body_len(ip_msg->ip_hdr));
-    ip_debugfl("fragment size:%d", ipv4_hdr_body_len(ip_msg->ip_hdr));
+    ip_debugfl("start offset:%d",ipv4_hdr_offset(ip_hdr));
+    ip_debugfl("end offset:%d",ipv4_hdr_offset(ip_hdr) + ipv4_hdr_body_len(ip_hdr));
+    ip_debugfl("fragment size:%d", ipv4_hdr_body_len(ip_hdr));
+
     if(ip_fragment_reasse_tab[index] == NULL){
         /* 收到的第一个分片 */
         ip_debugfl("first fragment!");
-        ret = ip_message_convert_to_fragment(ip_msg);
-        if(ret < 0){
-            ip_message_free_and_buffer_clean(ip_msg);
-        }else{
-            ip_fragment_reasse_tab[index] = ip_msg;
-        }
+        ip_fragment_reasse_tab[index] = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr);
         return NULL;
     }
-    ip_debugfl("add fragment %d", ip_fragment_reasse_tab[index]->fragment_num);
-    ret = ip_message_add_fragment(ip_fragment_reasse_tab[index], ip_msg);
-    ip_message_free_and_buffer_clean(ip_msg);
+
+    ip_debugfl("add fragment %d", ip_fragment_reasse_tab[index]->rx_fragment->fragment_cnt);
+    
+    /* 
+     * add 对ip_msg不会做任何更改，而是在ehip_buffer 内部引用计数+1 
+     */
+    ret = ip_message_rx_merge_fragment(ip_fragment_reasse_tab[index], buffer, ip_hdr);
     if(ret < 0){
-        ip_message_free_and_buffer_clean(ip_fragment_reasse_tab[index]);
+        ip_message_free(ip_fragment_reasse_tab[index]);
         ip_fragment_reasse_tab[index] = NULL;
         return NULL;
     }
@@ -128,23 +128,23 @@ static void slot_function_ip_reasse_1s_timer_handler(eh_event_t *e, void *slot_p
         if(ip_fragment_reasse_tab[i] == NULL)
             continue;
 
-        if(ip_fragment_reasse_tab[i]->expires_cd > 0)
-            ip_fragment_reasse_tab[i]->expires_cd--;
+        if(ip_fragment_reasse_tab[i]->rx_fragment->expires_cd > 0)
+            ip_fragment_reasse_tab[i]->rx_fragment->expires_cd--;
 
-        if(ip_fragment_reasse_tab[i]->expires_cd == 0){
+        if(ip_fragment_reasse_tab[i]->rx_fragment->expires_cd == 0){
             /* ip分片等待时间超时，释放分片记录 */
             ip_debugfl("IP fragment timeout, freeing fragment record. [id:%d] [src:%d.%d.%d.%d -> %d.%d.%d.%d]", 
-                eh_hton16(ip_fragment_reasse_tab[i]->ip_hdr->id),
-                ipv4_addr_to_dec0(ip_fragment_reasse_tab[i]->ip_hdr->src_addr), 
-                ipv4_addr_to_dec1(ip_fragment_reasse_tab[i]->ip_hdr->src_addr), 
-                ipv4_addr_to_dec2(ip_fragment_reasse_tab[i]->ip_hdr->src_addr), 
-                ipv4_addr_to_dec3(ip_fragment_reasse_tab[i]->ip_hdr->src_addr), 
-                ipv4_addr_to_dec0(ip_fragment_reasse_tab[i]->ip_hdr->dst_addr), 
-                ipv4_addr_to_dec1(ip_fragment_reasse_tab[i]->ip_hdr->dst_addr), 
-                ipv4_addr_to_dec2(ip_fragment_reasse_tab[i]->ip_hdr->dst_addr), 
-                ipv4_addr_to_dec3(ip_fragment_reasse_tab[i]->ip_hdr->dst_addr)
+                eh_hton16(ip_fragment_reasse_tab[i]->ip_hdr.id),
+                ipv4_addr_to_dec0(ip_fragment_reasse_tab[i]->ip_hdr.src_addr), 
+                ipv4_addr_to_dec1(ip_fragment_reasse_tab[i]->ip_hdr.src_addr), 
+                ipv4_addr_to_dec2(ip_fragment_reasse_tab[i]->ip_hdr.src_addr), 
+                ipv4_addr_to_dec3(ip_fragment_reasse_tab[i]->ip_hdr.src_addr), 
+                ipv4_addr_to_dec0(ip_fragment_reasse_tab[i]->ip_hdr.dst_addr), 
+                ipv4_addr_to_dec1(ip_fragment_reasse_tab[i]->ip_hdr.dst_addr), 
+                ipv4_addr_to_dec2(ip_fragment_reasse_tab[i]->ip_hdr.dst_addr), 
+                ipv4_addr_to_dec3(ip_fragment_reasse_tab[i]->ip_hdr.dst_addr)
             );
-            ip_message_free_and_buffer_clean(ip_fragment_reasse_tab[i]);
+            ip_message_free(ip_fragment_reasse_tab[i]);
             ip_fragment_reasse_tab[i] = NULL;
         }
     }
@@ -154,36 +154,38 @@ static EH_DEFINE_SLOT(slot_timer, slot_function_ip_reasse_1s_timer_handler, NULL
 
 static void ip_handle(struct ehip_buffer* buf){
     struct ip_hdr *ip_hdr = (struct ip_hdr *)ehip_buffer_get_payload_ptr(buf);
-    ehip_buffer_size_t totlen = ehip_buffer_get_buffer_size(buf);
-    ehip_buffer_size_t iphdr_len = 0;
+    ehip_buffer_size_t buffer_all_len = ehip_buffer_get_payload_size(buf);
+    ehip_buffer_size_t ip_msg_len = 0;
     struct ip_message *ip_message;
     struct route_info next_hop;
     enum route_table_type route_type;
     struct ipv4_netdev *ipv4_dev;
     ipv4_addr_t  src_addr;
     ipv4_addr_t  dst_addr;
+    ehip_buffer_size_t trim_len;
 
-    
     ipv4_dev = ehip_netdev_trait_ipv4_dev(buf->netdev);
     if(ipv4_dev == NULL)
         goto drop;
     
     if( buf->packet_type == EHIP_PACKET_TYPE_OTHERHOST || 
-        (size_t)totlen < sizeof(struct ip_hdr) ||
+        (size_t)buffer_all_len < sizeof(struct ip_hdr) ||
         ip_hdr->version != 4 || ip_hdr->ihl < 5 ||
-        ehip_buffer_head_reduce(buf, (ehip_buffer_size_t)(ip_hdr->ihl << 2)) == NULL ||
-        (iphdr_len = eh_ntoh16(ip_hdr->tot_len)) < (ehip_buffer_size_t)(ip_hdr->ihl << 2) ||
-        totlen < iphdr_len
+        buffer_all_len < (ehip_buffer_size_t)(ip_hdr->ihl << 2) ||
+        (ip_msg_len = eh_ntoh16(ip_hdr->tot_len)) < (ehip_buffer_size_t)(ip_hdr->ihl << 2) ||
+        buffer_all_len < ip_msg_len
     )
         goto drop;
-
+        
     if(eh_unlikely(ehip_inet_chksum(ip_hdr, ip_hdr->ihl << 2) != 0))
         goto drop;
-    ip_message = ip_message_new();
-    if(ip_message == NULL)
+
+    /* 修剪尾部多余长度  totlen-iphdr_len */
+    
+    trim_len = buffer_all_len - ip_msg_len;
+    if(trim_len && ehip_buffer_payload_reduce(buf, trim_len) == NULL)
         goto drop;
-    ip_message->ip_hdr = ip_hdr;
-    ip_message->buffer = buf;
+
     src_addr = ip_hdr->src_addr;
     dst_addr = ip_hdr->dst_addr;
 
@@ -195,7 +197,7 @@ static void ip_handle(struct ehip_buffer* buf){
         ipv4_addr_to_dec0(dst_addr), ipv4_addr_to_dec1(dst_addr),
         ipv4_addr_to_dec2(dst_addr), ipv4_addr_to_dec3(dst_addr));
     ip_debugfl("tos:%02x", ip_hdr->tos);
-    ip_debugfl("iphdr_len:%d", iphdr_len);
+    ip_debugfl("iphdr_len:%d", ip_msg_len);
     ip_debugfl("id:%d", eh_ntoh16(ip_hdr->id));
     ip_debugfl("frag_off:%04x", eh_ntoh16(ip_hdr->frag_off));
     ip_debugfl("ttl:%d", ip_hdr->ttl);
@@ -207,47 +209,67 @@ static void ip_handle(struct ehip_buffer* buf){
     route_type = ipv4_route_input(src_addr, dst_addr, buf->netdev, &next_hop);
     switch(route_type){
         case ROUTE_TABLE_UNREACHABLE:
-            goto ip_message_drop;
+            goto drop;
         case ROUTE_TABLE_MULTICAST:
             /* 判断是否为本机的多播报文 */
-                goto ip_message_drop;
+                goto drop;
         case ROUTE_TABLE_BROADCAST:
             break;
         case ROUTE_TABLE_ANYCAST:
         case ROUTE_TABLE_UNICAST:
             if(!ipv4_netdev_flags_is_forward_support(ipv4_dev))
-                goto ip_message_drop;
+                goto drop;
             /* TODO:  调用转发函数，进行转发*/
 
             /* fallthrough */
         case ROUTE_TABLE_LOCAL:
             if(!ipv4_netdev_flags_is_forward_support(ipv4_dev))
-                goto ip_message_drop;
+                goto drop;
         case ROUTE_TABLE_LOCAL_SELF:
             break;
     }
-    
+
+    /* 去除头部 */
+    ehip_buffer_head_reduce(buf, (ehip_buffer_size_t)(ip_hdr->ihl << 2));
     /* 进行分片组合 */
     if(ipv4_hdr_is_fragment(ip_hdr)){
         int i,sort_i;
         ehip_buffer_t *pos_buffer;
         ip_debugfl("ip fragment !");
-        ip_message = ip_reasse(ip_message);
+        /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
+        ip_message = ip_reasse(buf, ip_hdr);
         if(ip_message == NULL)
             return ;
         ip_debugfl("ip reassemble success!");
-        ip_message_fragment_for_each(pos_buffer, i, sort_i, ip_message){
+        ip_message_rx_fragment_for_each(pos_buffer, i, sort_i, ip_message){
             // ip_debugfl("fragment %d %d : |%.*hhq|", i ,
             //     ehip_buffer_get_payload_size(pos_buffer),
             //     ehip_buffer_get_payload_size(pos_buffer),
             //     ehip_buffer_get_payload_ptr(pos_buffer));
             ip_debugfl("fragment %d %d", i , ehip_buffer_get_payload_size(pos_buffer));
         }
+    }else{
+        /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
+        ip_message = ip_message_rx_new(buf->netdev, buf, ip_hdr);
+        if(ip_message == NULL)
+            return ;
     }
-
-ip_message_drop:
+    /* 到达此行时 ip_hdr 已经不可用，所有权被转移到 ip_message */
+    switch (ip_message->ip_hdr.protocol) {
+        case IP_PROTO_ICMP:
+            break;
+        case IP_PROTO_IGMP:
+            break;
+        case IP_PROTO_UDP:
+            break;
+        case IP_PROTO_UDPLITE:
+            break;
+        case IP_PROTO_TCP:
+            break;
+    }
+// ip_message_drop:
     /* ip_message_free中会自动释放 ehip_buffer */
-    ip_message_free_and_buffer_clean(ip_message);
+    ip_message_free(ip_message);
     return ;
 drop:
     ehip_buffer_free(buf);

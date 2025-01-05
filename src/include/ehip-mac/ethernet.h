@@ -38,6 +38,7 @@ extern const ehip_eth_addr_t ehip_eth_mac_addr_broadcast;
 
 #define EHIP_ETH_FRAME_MAX_LEN          (sizeof(struct eth_hdr) + 1500U + 4U) /* 1518:  1500 bytes payload + 14 bytes header + 4 bytes CRC*/
 #define EHIP_ETH_FRAME_MIN_LEN          (sizeof(struct eth_hdr) + 46U + 4U)   /* 64:      46 bytes payload + 14 bytes header + 4 bytes CRC*/
+#define EHIP_ETH_FRAME_CRC_LEN          4U
 
 #define EHIP_ETH_MAC_ADDR_BROADCAST  (&ehip_eth_mac_addr_broadcast)
 
