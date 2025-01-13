@@ -72,9 +72,9 @@ struct ip_hdr{
     uint16_be_t                 tot_len;
     uint16_be_t                 id;
 
-#define IP_FRAG_RF              0x8000U        /* reserved fragment flag */
-#define IP_FRAG_DF              0x4000U        /* don't fragment flag */
-#define IP_FRAG_MF              0x2000U        /* more fragments flag */
+#define IP_FRAG_RF              0x8000U         /* reserved fragment flag */
+#define IP_FRAG_DF              0x4000U         /* don't fragment flag */
+#define IP_FRAG_MF              0x2000U         /* more fragments flag */
 #define IP_FRAG_OFFMASK         0x1fffU         /* mask for fragmenting bits */
     uint16_be_t                 frag_off;       /* 分片和分片偏移 */
     uint8_t                     ttl;
@@ -94,10 +94,16 @@ struct ip_hdr{
 }eh_aligned(1);
 
 #define ipv4_hdr_offset(hdr) ((uint16_t)((eh_ntoh16((hdr)->frag_off) & IP_FRAG_OFFMASK) << 3))
+#define ipv4_hdr_len(hdr)  ((uint16_t)((hdr)->ihl << 2))
 #define ipv4_hdr_body_len(hdr) (eh_ntoh16((hdr)->tot_len) - (uint16_t)((hdr)->ihl << 2))
 #define ipv4_hdr_total_len(hdr) (eh_ntoh16((hdr)->tot_len))
 #define ipv4_hdr_is_fragment(hdr) (!!((hdr)->frag_off & eh_ntoh16(IP_FRAG_OFFMASK|IP_FRAG_MF)))
 #define ipv4_hdr_is_mf(hdr) (!!((hdr)->frag_off & eh_ntoh16(IP_FRAG_MF)))
+
+#define ipv4_hdr_frag_set(hdr, offset, frag_flag) do{ \
+    (hdr)->frag_off = eh_hton16(((offset) >> 0x3) | (frag_flag)); \
+}while(0)
+
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)(0xffffffffU >> (32 - (mask_len))))

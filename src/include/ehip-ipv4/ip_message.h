@@ -45,7 +45,7 @@ struct ip_rx_fragment{
 struct ip_tx_fragment{
     uint16_t                fragment_offset;
     uint8_t                 fragment_cnt;
-    struct ehip_buffer_t    *fragment_buffer[EHIP_IP_MAX_FRAGMENT_NUM];
+    ehip_buffer_t           *fragment_buffer[EHIP_IP_MAX_FRAGMENT_NUM];
 };
 
 struct ip_message{
@@ -55,19 +55,26 @@ struct ip_message{
         ehip_buffer_t                  *buffer;             /* 不分片时 */
         struct ip_rx_fragment          *rx_fragment;        /* 接收分片报文时 */
         struct ip_tx_fragment          *tx_fragment;        /* 发送分片报文时 */
+        ehip_netdev_t                  *tx_init_netdev;
     };
-	struct ehip_max_hw_addr		        hw_addr;
+    struct {
+        struct ehip_max_hw_addr		        dts_hw_addr;
+    }tx_param;
 
-#define   IP_MESSAGE_FLAG_TX       0x00000001            // bit0: 1:发送报文 0:接收报文
-#define   IP_MESSAGE_FLAG_FRAGMENT 0x00000002            // bit1: 1:分片报文 0:不分片报文
-#define   IP_MESSAGE_FLAG_BROKEN   0x00000004            // bit2: 1:破碎的分片报文 0:正常分片报文
-    uint32_t                            flags;
+#define   IP_MESSAGE_FLAG_TX                0x00000001            // bit0: 1:发送报文 0:接收报文
+#define   IP_MESSAGE_FLAG_FRAGMENT          0x00000002            // bit1: 1:分片报文 0:不分片报文
+#define   IP_MESSAGE_FLAG_BROKEN            0x00000004            // bit2: 1:破碎的分片报文 0:正常分片报文
+#define   IP_MESSAGE_FLAG_TX_BUFFER_INIT    0x00000008            // bit3: 1:TX_BUFFER已经初始化 0:TX_BUFFER未初始化
+#define   IP_MESSAGE_FLAG_TX_READY          0x00000010            // bit4: 1:TX报文已经准备好 0:TX报文未准备好
+    uint32_t                                flags;
 };
 
 
 #define ip_message_flag_is_tx(msg)          ((msg)->flags & IP_MESSAGE_FLAG_TX)
 #define ip_message_flag_is_fragment(msg)    ((msg)->flags & IP_MESSAGE_FLAG_FRAGMENT)
 #define ip_message_flag_is_broken(msg)      ((msg)->flags & IP_MESSAGE_FLAG_BROKEN)
+#define ip_message_flag_is_tx_buffer_init(msg)     ((msg)->flags & IP_MESSAGE_FLAG_TX_BUFFER_INIT)
+#define ip_message_flag_is_tx_ready(msg)    ((msg)->flags & IP_MESSAGE_FLAG_TX_READY)
 
 /**
  * @brief                   创建一个可用于发送的IP报文信息
@@ -81,21 +88,24 @@ struct ip_message{
  * @return struct ip_message* 
  */
 extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
-    uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, struct ehip_max_hw_addr *dts_hw_addr);
+    uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
+    struct ehip_max_hw_addr *dts_hw_addr, uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size);
 
 /**
  * @brief                   往ip tx message中添加一个buffer, 返回的buffer中会自动预留出mac和ip头部的空间
  * @param  msg_hander       返回由ip_message_tx_new创建的ip_message_t结构体
- * @return struct ehip_buffer_t* 
+ * @param  out_buffer       返回的buffer
+ * @param  out_buffer_size  返回的此buffer可填充的大小
+ * @return int
  */
-extern struct ehip_buffer_t* ip_message_tx_add_buffer(struct ip_message* msg_hander);
+extern int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_size);
 
 /**
  * @brief                   完成一个ip tx message的构建,当调用该函数后，会自动填充全部的mac和ip头部
  * @param  msg_hander       返回由ip_message_tx_new创建的ip_message_t结构体
  * @return int              成功返回0，失败返回负数
  */
-extern int ip_message_finish(struct ip_message *msg_hander);
+extern int ip_message_tx_ready(struct ip_message *msg_hander);
 
 
 /**

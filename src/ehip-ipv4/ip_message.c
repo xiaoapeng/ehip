@@ -7,16 +7,23 @@
  * @copyright Copyright (c) 2024  simon.xiaoapeng@gmail.com
  * 
  */
+
+#include <stdint.h>
 #include <string.h>
+
 #include <eh_error.h>
+#include <eh_swab.h>
 #include <eh_mem_pool.h>
 #include <eh_types.h>
 #include <eh_debug.h>
+
+#include <ehip_netdev.h>
 #include <ehip_buffer.h>
 #include <ehip_module.h>
 #include <ehip-ipv4/ip.h>
 #include <ehip-ipv4/ip_message.h>
-
+#include <ehip_chksum.h>
+#include <ehip_netdev_trait.h>
 
 eh_static_assert(EHIP_IP_MAX_FRAGMENT_NUM <= 0xFF, "IP fragment number must be less than 0xFF.");
 
@@ -24,7 +31,12 @@ static eh_mem_pool_t ip_message_pool;
 static eh_mem_pool_t ip_rx_fragment_pool;
 static eh_mem_pool_t ip_tx_fragment_pool;
 static eh_mem_pool_t options_bytes_pool;
+static uint16_t ip_message_id = 0;
 
+static uint16_be_t get_ip_message_id(void){
+    uint16_be_t id = ip_message_id++;
+    return eh_hton16(id);
+}
 
 static void ip_message_fragment_boroken(struct ip_message *msg){
     int i, sort_i;
@@ -58,6 +70,197 @@ void ip_message_free(struct ip_message *msg){
     }
     eh_mem_pool_free(ip_message_pool, msg);
 }
+
+
+struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
+    uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, struct ehip_max_hw_addr *dts_hw_addr, 
+    uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size){
+    struct ip_message * new_msg;
+
+    if(netdev == NULL || (options_bytes && options_bytes_size > IP_OPTIONS_MAX_LEN) ){
+        return NULL;
+    }
+    new_msg =  eh_mem_pool_alloc(ip_message_pool);
+    if(new_msg == NULL)
+        return NULL;
+    memset(new_msg, 0, sizeof(struct ip_message));
+    new_msg->flags |= IP_MESSAGE_FLAG_TX;
+    new_msg->tx_param.dts_hw_addr = *dts_hw_addr;
+    memcpy(&new_msg->tx_param.dts_hw_addr, dts_hw_addr, EHIP_ETH_HWADDR_MAX_LEN);
+    new_msg->ip_hdr.tos = tos;
+    new_msg->ip_hdr.ttl = ttl;
+    new_msg->ip_hdr.protocol = protocol;
+    new_msg->ip_hdr.src_addr = src_addr;
+    new_msg->ip_hdr.dst_addr = dst_addr;
+    new_msg->ip_hdr.ihl = 0xF & ((sizeof(struct ip_hdr) + options_bytes_size + 3) >> 2);
+
+    new_msg->tx_init_netdev = netdev;
+
+    if(options_bytes && options_bytes_size > 0){
+        new_msg->options_bytes = eh_mem_pool_alloc(options_bytes_pool);
+        if(new_msg->options_bytes == NULL){
+            goto options_bytes_pool_eh_mem_pool_alloc_error;
+        }
+        memcpy(new_msg->options_bytes, options_bytes, options_bytes_size);
+    }
+
+    return new_msg;
+options_bytes_pool_eh_mem_pool_alloc_error:
+eh_mem_pool_free(ip_message_pool, new_msg);
+    return NULL;
+}
+
+
+int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_size){
+    ehip_netdev_t *netdev;
+    ehip_buffer_t *buffer;
+    struct ip_tx_fragment *tx_fragment;
+    eh_param_assert(msg_hander);
+    eh_param_assert(out_buffer);
+    eh_param_assert(out_buffer_size);
+    eh_param_assert(ip_message_flag_is_tx(msg_hander));
+
+    if(!ip_message_flag_is_fragment(msg_hander)){
+        /* 没有进行分片 */
+        if(!ip_message_flag_is_tx_buffer_init(msg_hander)){
+            netdev = msg_hander->tx_init_netdev;
+            buffer = ehip_buffer_new(netdev->attr.buffer_type, netdev->attr.hw_head_size + ipv4_hdr_len(&msg_hander->ip_hdr));
+            if(buffer == NULL)
+                return EH_RET_MEM_POOL_EMPTY;
+            msg_hander->buffer = buffer;
+            msg_hander->flags |= IP_MESSAGE_FLAG_TX_BUFFER_INIT;
+            msg_hander->buffer->netdev = netdev;
+            *out_buffer = buffer;
+            *out_buffer_size = netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr);
+            return EH_RET_OK;
+        }
+        /* 修改其为分片模式 */
+        tx_fragment = eh_mem_pool_alloc(ip_tx_fragment_pool);
+        if(tx_fragment == NULL)
+            return EH_RET_MEM_POOL_EMPTY;
+        tx_fragment->fragment_cnt = 1;
+        tx_fragment->fragment_offset = 0;
+        tx_fragment->fragment_buffer[0] = msg_hander->buffer;
+        msg_hander->tx_fragment = tx_fragment;
+        msg_hander->flags |= IP_MESSAGE_FLAG_FRAGMENT;
+    }
+    /* 分片模式 */
+    tx_fragment = msg_hander->tx_fragment;
+    if(tx_fragment->fragment_cnt >= EHIP_IP_MAX_FRAGMENT_NUM)
+        return EH_RET_INVALID_STATE;
+    netdev = tx_fragment->fragment_buffer[0]->netdev;
+    buffer = ehip_buffer_new(netdev->attr.buffer_type, 
+        netdev->attr.hw_head_size + sizeof(struct ip_hdr));
+    if(buffer == NULL)
+        return EH_RET_MEM_POOL_EMPTY;
+    buffer->netdev = netdev;
+    *out_buffer = buffer;
+    *out_buffer_size = (netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & 0x7;
+    tx_fragment->fragment_buffer[tx_fragment->fragment_cnt++] = buffer;
+    
+    return EH_RET_OK;
+}
+
+
+int ip_message_tx_ready(struct ip_message *msg_hander){
+    ehip_netdev_t *netdev;
+    int ret;
+    ehip_buffer_t *buffer;
+    struct ip_hdr * ip_hdr_buffer;
+    ehip_buffer_size_t options_len;
+    ehip_buffer_size_t offset;
+    ehip_buffer_size_t playload_size;
+    struct ip_tx_fragment *tx_fragment;
+
+    eh_param_assert(msg_hander);
+    eh_param_assert(ip_message_flag_is_tx(msg_hander));
+    eh_param_assert(ip_message_flag_is_tx_buffer_init(msg_hander));
+    eh_param_assert(!ip_message_flag_is_tx_ready(msg_hander));
+
+    if(!ip_message_flag_is_fragment(msg_hander)){
+        /* 没有进行分片 */
+        buffer = msg_hander->buffer;
+
+        netdev = buffer->netdev;
+
+        msg_hander->ip_hdr.version = 4;
+        msg_hander->ip_hdr.id = get_ip_message_id();
+        msg_hander->ip_hdr.tot_len = eh_hton16(ehip_buffer_get_payload_size(buffer) + ipv4_hdr_len(&msg_hander->ip_hdr));
+        msg_hander->ip_hdr.frag_off = 0;
+        msg_hander->ip_hdr.check = 0;
+
+        ip_hdr_buffer = (struct ip_hdr *)ehip_buffer_head_append(buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
+        if(ip_hdr_buffer == NULL)
+            return EH_RET_INVALID_STATE;
+        memcpy(ip_hdr_buffer, &msg_hander->ip_hdr, sizeof(struct ip_hdr));
+        options_len = ipv4_hdr_len(&msg_hander->ip_hdr) - (ehip_buffer_size_t)sizeof(struct ip_hdr);
+        if(options_len && msg_hander->options_bytes)
+            memcpy(ip_hdr_buffer->options, msg_hander->options_bytes, options_len);
+        ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
+
+        ret = ehip_netdev_trait_hard_header( msg_hander->tx_init_netdev, buffer, 
+            ehip_netdev_trait_hw_addr(netdev), &msg_hander->tx_param.dts_hw_addr, 
+            EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(buffer) );
+        if(ret < 0)
+            return ret;
+        ret = ehip_netdev_trait_buffer_padding(netdev, buffer);
+        if(ret < 0)
+            return ret;
+        msg_hander->flags |= IP_MESSAGE_FLAG_TX_READY;
+        return EH_RET_OK;
+    }
+    /* 分片模式 */
+    tx_fragment = msg_hander->tx_fragment;
+    if(tx_fragment->fragment_cnt <= 2){
+        return EH_RET_INVALID_STATE;
+    }
+
+    msg_hander->ip_hdr.version = 4;
+    msg_hander->ip_hdr.id = get_ip_message_id();
+    msg_hander->ip_hdr.frag_off = 0;
+    offset = 0;
+    netdev = tx_fragment->fragment_buffer[0]->netdev;
+    for(int i = 0; i < tx_fragment->fragment_cnt; i++){
+        buffer = tx_fragment->fragment_buffer[i];
+        ipv4_hdr_frag_set(&msg_hander->ip_hdr, offset, 
+            i == tx_fragment->fragment_cnt - 1 ? 0 : IP_FRAG_MF);
+        playload_size = ehip_buffer_get_payload_size(buffer);
+        if(playload_size & 0x7){
+            /* 分片必须以8字节对齐 */
+            return EH_RET_INVALID_STATE;
+        }
+        offset += playload_size;
+        msg_hander->ip_hdr.tot_len = eh_hton16( playload_size + ipv4_hdr_len(&msg_hander->ip_hdr) );
+        msg_hander->ip_hdr.check = 0;
+        
+        ip_hdr_buffer = (struct ip_hdr *)ehip_buffer_head_append(
+                buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
+        if(ip_hdr_buffer == NULL)
+            return EH_RET_INVALID_STATE;
+        memcpy(ip_hdr_buffer, &msg_hander->ip_hdr, sizeof(struct ip_hdr));
+        options_len = ipv4_hdr_len(&msg_hander->ip_hdr) - (ehip_buffer_size_t)sizeof(struct ip_hdr);
+        if(options_len){
+            if(msg_hander->options_bytes)
+                memcpy(ip_hdr_buffer->options, msg_hander->options_bytes, options_len);
+
+            msg_hander->ip_hdr.ihl = sizeof(struct ip_hdr) >> 2;
+        }
+        ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(ip_hdr_buffer));
+
+        ret = ehip_netdev_trait_hard_header( netdev, buffer, 
+            ehip_netdev_trait_hw_addr(netdev), &msg_hander->tx_param.dts_hw_addr,
+            EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(buffer));
+        if(ret < 0)
+            return ret;
+        ret = ehip_netdev_trait_buffer_padding(netdev, buffer);
+        if(ret < 0)
+            return ret;
+    }
+    msg_hander->flags |= IP_MESSAGE_FLAG_TX_READY;
+    return EH_RET_OK;
+}
+
+
 
 int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
     uint16_t fragment_start_offset;
@@ -185,7 +388,7 @@ static struct ip_message* _ip_message_rx_new(const struct ip_hdr *ip_hdr){
             eh_mem_pool_free(ip_message_pool, new_msg);
             return NULL;
         }
-        memcpy(new_msg->options_bytes, ip_hdr+1, (size_t)((ip_hdr->ihl - 5) * 4));
+        memcpy(new_msg->options_bytes, ip_hdr->options, (size_t)((ip_hdr->ihl - 5) * 4));
     }
     memcpy(&new_msg->ip_hdr, ip_hdr, sizeof(struct ip_hdr));
     return new_msg;

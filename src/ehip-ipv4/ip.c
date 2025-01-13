@@ -171,13 +171,13 @@ static void ip_handle(struct ehip_buffer* buf){
     if( buf->packet_type == EHIP_PACKET_TYPE_OTHERHOST || 
         (size_t)buffer_all_len < sizeof(struct ip_hdr) ||
         ip_hdr->version != 4 || ip_hdr->ihl < 5 ||
-        buffer_all_len < (ehip_buffer_size_t)(ip_hdr->ihl << 2) ||
-        (ip_msg_len = eh_ntoh16(ip_hdr->tot_len)) < (ehip_buffer_size_t)(ip_hdr->ihl << 2) ||
+        buffer_all_len < (ehip_buffer_size_t)(ipv4_hdr_len(ip_hdr)) ||
+        (ip_msg_len = eh_ntoh16(ip_hdr->tot_len)) < (ehip_buffer_size_t)(ipv4_hdr_len(ip_hdr)) ||
         buffer_all_len < ip_msg_len
     )
         goto drop;
         
-    if(eh_unlikely(ehip_inet_chksum(ip_hdr, ip_hdr->ihl << 2) != 0))
+    if(eh_unlikely(ehip_inet_chksum(ip_hdr, ipv4_hdr_len(ip_hdr)) != 0))
         goto drop;
 
     /* 修剪尾部多余长度  totlen-iphdr_len */
@@ -230,7 +230,7 @@ static void ip_handle(struct ehip_buffer* buf){
     }
 
     /* 去除头部 */
-    ehip_buffer_head_reduce(buf, (ehip_buffer_size_t)(ip_hdr->ihl << 2));
+    ehip_buffer_head_reduce(buf, (ehip_buffer_size_t)(ipv4_hdr_len(ip_hdr)));
     /* 进行分片组合 */
     if(ipv4_hdr_is_fragment(ip_hdr)){
         int i,sort_i;
@@ -267,8 +267,6 @@ static void ip_handle(struct ehip_buffer* buf){
         case IP_PROTO_TCP:
             break;
     }
-// ip_message_drop:
-    /* ip_message_free中会自动释放 ehip_buffer */
     ip_message_free(ip_message);
     return ;
 drop:
