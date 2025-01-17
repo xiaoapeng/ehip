@@ -44,7 +44,8 @@ struct ip_rx_fragment{
 
 struct ip_tx_fragment{
     uint16_t                fragment_offset;
-    uint8_t                 fragment_cnt;
+    uint8_t                 fragment_read_offset;
+    uint8_t                 fragment_add_offset;
     ehip_buffer_t           *fragment_buffer[EHIP_IP_MAX_FRAGMENT_NUM];
 };
 
@@ -109,7 +110,7 @@ extern int ip_message_tx_ready(struct ip_message *msg_hander);
 
 
 /**
- * @brief                   创建一个用于接收的IP报文信息
+ * @brief                   创建一个用于接收的IP消息
  * @param  netdev           接收该报文的网卡
  * @param  buffer           接收到的buffer, buffer的传入意味着所有权的转让，请勿重复unref
  * @param  ip_hdr           解析出的ip头部
@@ -118,7 +119,7 @@ extern int ip_message_tx_ready(struct ip_message *msg_hander);
 extern struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr);
 
 /**
- * @brief                   创建一个用于接收的IP报文信息,并且该报文是一个分片报文,可接收后面合并其他分片
+ * @brief                   创建一个用于接收的IP消息,并且该报文是一个分片报文,可接收后面合并其他分片
  * @param  netdev           接收该报文的网卡
  * @param  buffer           接收到的buffer, buffer的传入意味着所有权的转让，请勿重复unref
  * @param  ip_hdr           解析出的ip头部
@@ -151,6 +152,18 @@ extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer
         ((pos_buffer = ip_fragment_msg->rx_fragment->fragment_info[int_tmp_sort_i].fragment_buffer) || 1U); \
         int_tmp_sort_i = ip_fragment_msg->rx_fragment->fragment_sort[++int_tmp_i])
 
+
+/**
+ * @brief      遍历一个分片片段的 ip_message_t 结构体
+ * @param  pos_buffer       分片片段的 ehip_buffer_t 结构体指针
+ * @param  int_tmp_i        分片片段的索引
+ * @param  ip_fragment_msg  要遍历的 ip_message_t 结构体
+ */
+#define ip_message_tx_fragment_for_each(pos_buffer, int_tmp_i, ip_fragment_msg) \
+    for( int_tmp_i = ip_fragment_msg->tx_fragment->fragment_read_offset; \
+         int_tmp_i < ip_fragment_msg->tx_fragment->fragment_add_offset && \
+         ((pos_buffer = ip_fragment_msg->tx_fragment->fragment_buffer[int_tmp_i]) || 1U); \
+         int_tmp_i++)
 
 
 /**

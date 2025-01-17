@@ -57,7 +57,10 @@ void ip_message_free(struct ip_message *msg){
         int i, sort_i;
         ehip_buffer_t *pos_buffer;
         if(ip_message_flag_is_tx(msg)){
-            /* TODO */
+            ip_message_tx_fragment_for_each(pos_buffer, i, msg){
+                ehip_buffer_free(pos_buffer);
+            }
+            eh_mem_pool_free(ip_tx_fragment_pool, msg->tx_fragment);
         }else{
             ip_message_rx_fragment_for_each(pos_buffer, i, sort_i, msg){
                 ehip_buffer_free(pos_buffer);
@@ -65,7 +68,7 @@ void ip_message_free(struct ip_message *msg){
             eh_mem_pool_free(ip_rx_fragment_pool, msg->rx_fragment);
         }
     }else{
-        if(msg->buffer)
+        if(msg->buffer && ( !ip_message_flag_is_tx(msg) || ip_message_flag_is_tx_buffer_init(msg)))
             ehip_buffer_free(msg->buffer);
     }
     eh_mem_pool_free(ip_message_pool, msg);
@@ -138,7 +141,8 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         tx_fragment = eh_mem_pool_alloc(ip_tx_fragment_pool);
         if(tx_fragment == NULL)
             return EH_RET_MEM_POOL_EMPTY;
-        tx_fragment->fragment_cnt = 1;
+        tx_fragment->fragment_read_offset = 0;
+        tx_fragment->fragment_add_offset = 1;
         tx_fragment->fragment_offset = 0;
         tx_fragment->fragment_buffer[0] = msg_hander->buffer;
         msg_hander->tx_fragment = tx_fragment;
@@ -146,7 +150,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     }
     /* 分片模式 */
     tx_fragment = msg_hander->tx_fragment;
-    if(tx_fragment->fragment_cnt >= EHIP_IP_MAX_FRAGMENT_NUM)
+    if(tx_fragment->fragment_add_offset >= EHIP_IP_MAX_FRAGMENT_NUM)
         return EH_RET_INVALID_STATE;
     netdev = tx_fragment->fragment_buffer[0]->netdev;
     buffer = ehip_buffer_new(netdev->attr.buffer_type, 
@@ -156,7 +160,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     buffer->netdev = netdev;
     *out_buffer = buffer;
     *out_buffer_size = (netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & 0x7;
-    tx_fragment->fragment_buffer[tx_fragment->fragment_cnt++] = buffer;
+    tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset++] = buffer;
     
     return EH_RET_OK;
 }
@@ -211,7 +215,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander){
     }
     /* 分片模式 */
     tx_fragment = msg_hander->tx_fragment;
-    if(tx_fragment->fragment_cnt <= 2){
+    if(tx_fragment->fragment_add_offset <= 2){
         return EH_RET_INVALID_STATE;
     }
 
@@ -220,10 +224,10 @@ int ip_message_tx_ready(struct ip_message *msg_hander){
     msg_hander->ip_hdr.frag_off = 0;
     offset = 0;
     netdev = tx_fragment->fragment_buffer[0]->netdev;
-    for(int i = 0; i < tx_fragment->fragment_cnt; i++){
+    for(int i = 0; i < tx_fragment->fragment_add_offset; i++){
         buffer = tx_fragment->fragment_buffer[i];
         ipv4_hdr_frag_set(&msg_hander->ip_hdr, offset, 
-            i == tx_fragment->fragment_cnt - 1 ? 0 : IP_FRAG_MF);
+            i == tx_fragment->fragment_add_offset - 1 ? 0 : IP_FRAG_MF);
         playload_size = ehip_buffer_get_payload_size(buffer);
         if(playload_size & 0x7){
             /* 分片必须以8字节对齐 */
