@@ -256,18 +256,18 @@ static void ip_handle(struct ehip_buffer* buf){
     }
     /* 到达此行时 ip_hdr 已经不可用，所有权被转移到 ip_message */
     switch (ip_message->ip_hdr.protocol) {
-        case IP_PROTO_ICMP:
-            break;
+        case IP_PROTO_ICMP:{
+            extern int icmp_input(struct ip_message *ip_msg);
+            icmp_input(ip_message);
+            return ;
+        }
         case IP_PROTO_IGMP:
-            break;
         case IP_PROTO_UDP:
-            break;
         case IP_PROTO_UDPLITE:
-            break;
         case IP_PROTO_TCP:
+            ip_message_free(ip_message);
             break;
     }
-    ip_message_free(ip_message);
     return ;
 drop:
     ehip_buffer_free(buf);
