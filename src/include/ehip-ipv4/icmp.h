@@ -26,7 +26,12 @@ struct icmp_hdr {
   uint16_t	    checksum;
   union {
 	struct {
-		uint16_be_t	id;
+		/* 
+		 * 在windows中一般是进程id，我们只需要在ping时需要保持过程中的唯一性，
+		 * 若是被ping，则需要在回显报文中复制该值
+		 * sequence值，用于标识报文序号，在回显时需要复制该值 
+		 */
+		uint16_be_t	id;	
 		uint16_be_t	sequence;
 	}echo;
 	struct {
@@ -39,8 +44,6 @@ struct icmp_hdr {
 };
 
 extern int icmp_fill(struct ip_message *ip_msg);
-
-extern int icmp_input(struct ip_message *ip_msg);
 
 #ifdef __cplusplus
 #if __cplusplus
