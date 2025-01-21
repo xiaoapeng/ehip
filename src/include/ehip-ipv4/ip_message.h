@@ -11,7 +11,6 @@
 #ifndef _IP_MESSAGE_H_
 #define _IP_MESSAGE_H_
 
-#include "ehip_netdev.h"
 #ifdef __cplusplus
 #if __cplusplus
 extern "C"{
@@ -21,6 +20,7 @@ extern "C"{
 
 #include <eh_types.h>
 #include <eh_mem_pool.h>
+#include <ehip_netdev.h>
 #include <ehip-ipv4/arp.h>
 #include <ehip-mac/hw_addr.h>
 #include <stdint.h>
