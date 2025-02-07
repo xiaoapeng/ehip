@@ -11,6 +11,15 @@
 #ifndef _IP_MESSAGE_H_
 #define _IP_MESSAGE_H_
 
+#include <stdint.h>
+
+#include <eh_types.h>
+#include <eh_mem_pool.h>
+#include <ehip_netdev.h>
+#include <ehip-ipv4/arp.h>
+#include <ehip-mac/hw_addr.h>
+#include <ehip_buffer.h>
+
 #ifdef __cplusplus
 #if __cplusplus
 extern "C"{
@@ -18,12 +27,6 @@ extern "C"{
 #endif /* __cplusplus */
 
 
-#include <eh_types.h>
-#include <eh_mem_pool.h>
-#include <ehip_netdev.h>
-#include <ehip-ipv4/arp.h>
-#include <ehip-mac/hw_addr.h>
-#include <stdint.h>
 
 typedef struct ehip_buffer ehip_buffer_t;
 struct route_info;
@@ -72,10 +75,12 @@ struct ip_message{
 
 
 #define ip_message_flag_is_tx(msg)          ((msg)->flags & IP_MESSAGE_FLAG_TX)
+#define ip_message_flag_is_rx(msg)          (!((msg)->flags & IP_MESSAGE_FLAG_TX))
 #define ip_message_flag_is_fragment(msg)    ((msg)->flags & IP_MESSAGE_FLAG_FRAGMENT)
 #define ip_message_flag_is_broken(msg)      ((msg)->flags & IP_MESSAGE_FLAG_BROKEN)
 #define ip_message_flag_is_tx_buffer_init(msg)     ((msg)->flags & IP_MESSAGE_FLAG_TX_BUFFER_INIT)
 #define ip_message_flag_is_tx_ready(msg)    ((msg)->flags & IP_MESSAGE_FLAG_TX_READY)
+
 
 /**
  * @brief                   创建一个可用于发送的IP报文信息
@@ -171,6 +176,54 @@ extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer
  * @param  msg                 要释放的 ip_message_t 结构体
  */
 extern void ip_message_free(struct ip_message *msg);
+
+
+enum _ip_message_read_advanced_type{
+    IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ,
+    IP_MESSAGE_READ_ADVANCED_TYPE_PEEK,
+    IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP,
+};
+
+extern int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
+    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type);
+
+/**
+ * @brief                   读取一个ip_message_t中的数据
+ * @param  msg              msg description
+ * @param  out_data         输出
+ * @param  size             要读的数据大小
+ * @param  out_bak_buffer   如果读取的是分片的数据，则需要拼接到一个临时buffer中
+ * @return int              失败返回负数，成功返回读取的数据大小
+ */
+static inline int ip_message_rx_read(struct ip_message *msg, uint8_t **out_data, 
+    ehip_buffer_size_t size, uint8_t *out_bak_buffer){
+    return _ip_message_rx_read_advanced(msg, out_data, size, 
+        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ);
+}
+
+/**
+ * @brief                   假装读取一个ip_message_t中的数据,读指针偏移
+ * @param  msg              msg description
+ * @param  size             要读的数据大小
+ * @return int              失败返回负数，成功返回读取的数据大小
+ */
+static inline int ip_message_rx_read_skip(struct ip_message *msg, ehip_buffer_size_t size){
+    return _ip_message_rx_read_advanced(msg, NULL, size, NULL, IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP);
+}
+
+/**
+ * @brief                   偷看一个ip_message_t中的数据,不偏移读指针
+ * @param  msg              msg description
+ * @param  out_data         输出
+ * @param  size             要读的数据大小
+ * @param  out_bak_buffer   如果读取的是分片的数据，则需要拼接到一个临时buffer中
+ * @return int              失败返回负数，成功返回读取的数据大小
+ */
+static inline int ip_message_peek(struct ip_message *msg, uint8_t **out_data, ehip_buffer_size_t size, 
+    uint8_t *out_bak_buffer){
+    return _ip_message_rx_read_advanced(msg, out_data, size, 
+        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ);
+}
 
 #ifdef __cplusplus
 #if __cplusplus

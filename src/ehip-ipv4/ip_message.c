@@ -448,6 +448,63 @@ ip_message_rx_new_err:
 }
 
 
+int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
+    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type){
+
+    // 单次读的最大数据量
+    ehip_buffer_size_t              single_max_read_size = 0;
+    eh_param_assert(msg_hander);
+    eh_param_assert(ip_message_flag_is_rx(msg_hander));
+
+    if(!ip_message_flag_is_fragment(msg_hander)){
+        single_max_read_size = ehip_buffer_get_payload_size(msg_hander->buffer);
+        size = single_max_read_size < size ? single_max_read_size : size;
+        if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP )
+            *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(msg_hander->buffer);
+        if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK )
+            ehip_buffer_payload_reduce(msg_hander->buffer, size);
+        return size;
+    }
+    /* 分片模式 */
+    {
+        ehip_buffer_size_t              fragment_size;
+        int                             sort_i = 1, tmp_i;
+        ehip_buffer_t                  *buffer;
+        uint8_t                        *write_data_ptr;
+        struct fragment_info           *first_fragment_buffer;
+
+        first_fragment_buffer = &msg_hander->rx_fragment->fragment_info[0];
+        if(ehip_buffer_get_payload_size(first_fragment_buffer->fragment_buffer) >= size){
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP )
+                *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer);
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK )
+                ehip_buffer_payload_reduce(first_fragment_buffer->fragment_buffer, size);
+            return size;
+        }
+        write_data_ptr = out_bak_buffer;
+
+        ip_message_rx_fragment_for_each(buffer, tmp_i, sort_i, msg_hander){
+            fragment_size = ehip_buffer_get_payload_size(buffer);
+            if(fragment_size == 0)
+                continue;
+            single_max_read_size = fragment_size < size ? fragment_size : size;
+
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP )
+                memcpy(write_data_ptr, ehip_buffer_get_payload_ptr(buffer), single_max_read_size);
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK )
+                ehip_buffer_payload_reduce(buffer, single_max_read_size);
+
+            write_data_ptr += single_max_read_size;
+            size -= single_max_read_size;
+            if(size == 0)
+                break;
+        }
+        return write_data_ptr - out_bak_buffer;
+    }
+    
+
+}
+
 static int __init ip_message_pool_init(void)
 {
     int ret;

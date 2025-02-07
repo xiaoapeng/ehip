@@ -257,7 +257,7 @@ static void ip_handle(struct ehip_buffer* buf){
     /* 到达此行时 ip_hdr 已经不可用，所有权被转移到 ip_message */
     switch (ip_message->ip_hdr.protocol) {
         case IP_PROTO_ICMP:{
-            extern int icmp_input(struct ip_message *ip_msg);
+            extern void icmp_input(struct ip_message *ip_msg);
             icmp_input(ip_message);
             return ;
         }
