@@ -146,5 +146,9 @@
 #define EHIP_IP_FRAGMENT_TIMEOUT                                15
 #endif
 
+/* 默认TTL */
+#ifndef EHIP_IP_DEFAULT_TTL
+#define EHIP_IP_DEFAULT_TTL                                     64
+#endif
 
 #endif // _EHIP_CONF_H_
