@@ -137,13 +137,11 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
     arp_table_entry->state = new_state;
 
     if(new_hw_addr){
-        if(is_change == false){
-            for(int i=0; i<arp_table_entry->netdev->attr.hw_addr_len; i++){
-                if(((uint8_t*)new_hw_addr)[i] != ((uint8_t*)&arp_table_entry->hw_addr)[i]){
-                    is_change = true;
-                    break;
-                }
-            }
+        if(is_change == false && 
+            ehip_hw_addr_cmp(new_hw_addr, &arp_table_entry->hw_addr, 
+                arp_table_entry->netdev->attr.hw_addr_len))
+        {
+            is_change = true;
         }
         memcpy(arp_table_entry->hw_addr.addr, new_hw_addr, arp_table_entry->netdev->attr.hw_addr_len);
     }
