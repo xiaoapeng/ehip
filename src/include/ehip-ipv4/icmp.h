@@ -35,13 +35,18 @@ struct icmp_hdr {
 		uint16_be_t	sequence;
 	}echo;
 	struct {
-		uint16_be_t	__unused;
+		uint16_be_t	unused;
 		uint16_be_t	mtu;
 	}frag;
 	ipv4_addr_t	gateway;
 	uint8_t	reserved[4];
   };
 };
+
+#define ICMP_TYPE_ECHO_REPLY		0	/* 回显应答 */
+#define ICMP_TYPE_ECHO				8	/* 回显请求 */
+
+
 
 extern int icmp_fill(struct ip_message *ip_msg);
 
