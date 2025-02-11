@@ -104,7 +104,8 @@ static EH_DEFINE_SLOT(slot_timer, slot_function_arp_1s_timer_handler, NULL);
 /* 比较新旧状态，结果可以用来触发 signal_arptable_changed */
 static bool arp_state_is_change(uint8_t old_state, uint8_t new_state){
     return  ( (old_state >= ARP_STATE_NUD_STALE && new_state < ARP_STATE_NUD_STALE) ||
-              (old_state < ARP_STATE_NUD_STALE && new_state >= ARP_STATE_NUD_STALE)
+              (old_state < ARP_STATE_NUD_STALE && new_state >= ARP_STATE_NUD_STALE) ||
+              (old_state == ARP_STATE_NUD_INCOMPLETE && new_state != ARP_STATE_NUD_INCOMPLETE)
             );
 }
 
