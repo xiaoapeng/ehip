@@ -105,6 +105,15 @@ struct ip_hdr{
 }while(0)
 
 
+#define TOS_DSCP_MD     0b1000   /* 最小时延 */
+#define TOS_DSCP_MT     0b0100   /* 最大吞吐量 */
+#define TOS_DSCP_MR     0b0010   /* 最高可靠性 */
+#define TOS_DSCP_MMC    0b0001   /* 最小费用 */
+#define TOS_DSCP_NS     0b0000   /* 一般服务 */
+
+#define ipv4_make_tos(dscp, precedence) ((uint8_t)(((precedence) << 5) | ((uint8_t)((dscp) & 0xf) << 1)))
+
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)(0xffffffffU >> (32 - (mask_len))))
 #define ipv4_make_addr(dec0, dec1, dec2, dec3) ((ipv4_addr_t)(((dec0) << 0) | ((dec1) << 8) | ((dec2) << 16) | ((dec3) << 24)))
