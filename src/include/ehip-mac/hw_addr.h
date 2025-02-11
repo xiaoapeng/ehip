@@ -11,7 +11,7 @@
 #define _HW_ADDR_H_
 
 #include <stdint.h>
-
+#include <string.h>
 #include <eh_types.h>
 #include <ehip_conf.h>
 
@@ -32,6 +32,8 @@ struct ehip_max_hw_addr{
 
 
 typedef void ehip_hw_addr_t;
+
+#define ehip_hw_addr_cmp(addr1, addr2, len) memcmp((addr1), (addr2), (len))
 
 #ifdef __cplusplus
 #if __cplusplus
