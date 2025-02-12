@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <eh_types.h>
 #include <eh_signal.h>
+#include <eh_llist.h>
 #include <ehip_netdev.h>
 #include <ehip-mac/hw_addr.h>
 #include <ehip-ipv4/ip.h>
@@ -49,6 +50,7 @@ struct arp_entry{
 	struct ehip_netdev			*netdev;
 	ipv4_addr_t					ip_addr;
 	struct ehip_max_hw_addr		hw_addr;
+	struct eh_llist_head		callback_list;
 	uint8_t						state;
 };
 
@@ -94,6 +96,31 @@ static inline unsigned int arp_hdr_len(const ehip_netdev_t *dev)
  * @return int              成功返回索引值，失败返回负数。
  */
 extern int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_idx_or_minus);
+
+enum change_callback_return{
+	ARP_CALLBACK_CONTINUE = 0,
+	ARP_CALLBACK_ABORT = 1
+};
+
+struct arp_changed_callback{
+	struct eh_llist_node		node;
+	enum change_callback_return (*callback)(int idx, struct arp_changed_callback *callback_actiona);
+};
+
+/**
+ * @brief 							arp表项变化回调函数注册
+ * @param  idx              		arp表项索引
+ * @param  callback_actiona         回调动作结构块
+ * @return int 						成功返回0，失败返回负数
+ */
+extern int arp_changed_callback_register(int idx, struct arp_changed_callback *callback_actiona);
+
+/**
+ * @brief 							arp表项变化回调函数注销
+ * @param  idx              		arp表项索引
+ * @param  callback_actiona         回调动作结构块
+ */
+extern int arp_changed_callback_unregister(int idx, struct arp_changed_callback *callback_actiona);
 
 /**
  * @brief                   如果三层或者以上的协议确认了该IP的可达性，则调用该函数告诉arp层

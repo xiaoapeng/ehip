@@ -14,8 +14,9 @@
 #include <string.h>
 
 #include <eh.h>
-#include <eh_debug.h>
 #include <eh_types.h>
+#include <eh_debug.h>
+#include <eh_llist.h>
 #include <eh_error.h>
 #include <eh_swab.h>
 #include <eh_signal.h>
@@ -113,6 +114,8 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
     bool is_change;
     struct arp_entry *arp_table_entry = &_arp_table[index];
     uint8_t old_state = arp_table_entry->state;
+    struct eh_llist_node *pos, *n, *prev;
+    struct arp_changed_callback *callback_actiona;
 
     if(old_state != new_state){
         switch ((enum etharp_state)new_state) {
@@ -146,8 +149,17 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
         }
         memcpy(arp_table_entry->hw_addr.addr, new_hw_addr, arp_table_entry->netdev->attr.hw_addr_len);
     }
-    if(is_change)
+    if(is_change){
         eh_signal_notify(&signal_arp_table_changed);
+
+        prev = (struct eh_llist_node *)(&_arp_table[index].callback_list);
+        eh_llist_for_each_safe(pos, n, _arp_table[index].callback_list.first){
+            callback_actiona = eh_llist_entry(pos, struct arp_changed_callback, node);
+            if(callback_actiona->callback(index, callback_actiona) == ARP_CALLBACK_ABORT)
+                eh_llist_del(prev, pos);
+            prev = pos;
+        }
+    }
     return is_change;
 }
 
@@ -544,6 +556,32 @@ void arp_table_dump(void){
     }
 }
 
+
+int arp_changed_callback_register(int idx, struct arp_changed_callback *callback_actiona){
+    eh_param_assert(idx >= 0 && idx < (int)EHIP_ARP_CACHE_MAX_NUM);
+    eh_param_assert(callback_actiona);
+    eh_llist_add(&callback_actiona->node, &_arp_table[idx].callback_list);
+    return EH_RET_OK;
+}
+
+
+extern int arp_changed_callback_unregister(int idx, struct arp_changed_callback *callback_actiona){
+    struct eh_llist_node *pos, *n, *prev;
+    eh_param_assert(idx >= 0 && idx < (int)EHIP_ARP_CACHE_MAX_NUM);
+    eh_param_assert(callback_actiona);
+
+    prev = (struct eh_llist_node *)(&_arp_table[idx].callback_list);
+    eh_llist_for_each_safe(pos, n, _arp_table[idx].callback_list.first){
+        if(callback_actiona == eh_llist_entry(pos, struct arp_changed_callback, node)){
+            eh_llist_del(prev, pos);
+            return EH_RET_OK;
+        }
+        prev = pos;
+    }
+    return EH_RET_NOT_EXISTS;
+}
+
+
 static struct ehip_protocol_handle arp_protocol_handle = {
     .ptype = EHIP_PTYPE_ETHERNET_ARP,
     .handle = arp_handle,
@@ -565,6 +603,9 @@ static int __init arp_init(void){
     if(ret < 0) return ret;
     eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
     memset(&_arp_table, 0, sizeof(_arp_table));
+    for(size_t i=0; i<EHIP_ARP_CACHE_MAX_NUM; i++){
+        eh_llist_head_init(&_arp_table[i].callback_list);
+    }
     return 0;
 }
 
