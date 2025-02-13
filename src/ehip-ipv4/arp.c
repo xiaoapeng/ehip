@@ -155,10 +155,15 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
         prev = (struct eh_llist_node *)(&_arp_table[index].callback_list);
         eh_llist_for_each_safe(pos, n, _arp_table[index].callback_list.first){
             callback_actiona = eh_llist_entry(pos, struct arp_changed_callback, node);
-            if(callback_actiona->callback(index, callback_actiona) == ARP_CALLBACK_ABORT)
-                eh_llist_del(prev, pos);
+            if(callback_actiona->callback(callback_actiona) == ARP_CALLBACK_ABORT){
+                prev->next = n;
+                if(n == NULL)
+                    _arp_table[index].callback_list.last = prev;
+                continue;
+            }
             prev = pos;
         }
+
     }
     return is_change;
 }
@@ -557,21 +562,21 @@ void arp_table_dump(void){
 }
 
 
-int arp_changed_callback_register(int idx, struct arp_changed_callback *callback_actiona){
-    eh_param_assert(idx >= 0 && idx < (int)EHIP_ARP_CACHE_MAX_NUM);
+int arp_changed_callback_register(struct arp_changed_callback *callback_actiona){
     eh_param_assert(callback_actiona);
-    eh_llist_add(&callback_actiona->node, &_arp_table[idx].callback_list);
+    eh_param_assert(callback_actiona->idx >= 0 && callback_actiona->idx < (int)EHIP_ARP_CACHE_MAX_NUM);
+    eh_llist_add(&callback_actiona->node, &_arp_table[callback_actiona->idx].callback_list);
     return EH_RET_OK;
 }
 
 
-extern int arp_changed_callback_unregister(int idx, struct arp_changed_callback *callback_actiona){
+extern int arp_changed_callback_unregister(struct arp_changed_callback *callback_actiona){
     struct eh_llist_node *pos, *n, *prev;
-    eh_param_assert(idx >= 0 && idx < (int)EHIP_ARP_CACHE_MAX_NUM);
     eh_param_assert(callback_actiona);
+    eh_param_assert(callback_actiona->idx >= 0 && callback_actiona->idx < (int)EHIP_ARP_CACHE_MAX_NUM);
 
-    prev = (struct eh_llist_node *)(&_arp_table[idx].callback_list);
-    eh_llist_for_each_safe(pos, n, _arp_table[idx].callback_list.first){
+    prev = (struct eh_llist_node *)(&_arp_table[callback_actiona->idx].callback_list);
+    eh_llist_for_each_safe(pos, n, _arp_table[callback_actiona->idx].callback_list.first){
         if(callback_actiona == eh_llist_entry(pos, struct arp_changed_callback, node)){
             eh_llist_del(prev, pos);
             return EH_RET_OK;

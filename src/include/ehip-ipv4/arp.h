@@ -104,23 +104,22 @@ enum change_callback_return{
 
 struct arp_changed_callback{
 	struct eh_llist_node		node;
-	enum change_callback_return (*callback)(int idx, struct arp_changed_callback *callback_actiona);
+	int 						idx;
+	enum change_callback_return (*callback)(struct arp_changed_callback *callback_actiona);
 };
 
 /**
  * @brief 							arp表项变化回调函数注册
- * @param  idx              		arp表项索引
  * @param  callback_actiona         回调动作结构块
  * @return int 						成功返回0，失败返回负数
  */
-extern int arp_changed_callback_register(int idx, struct arp_changed_callback *callback_actiona);
+extern int arp_changed_callback_register(struct arp_changed_callback *callback_actiona);
 
 /**
  * @brief 							arp表项变化回调函数注销
- * @param  idx              		arp表项索引
  * @param  callback_actiona         回调动作结构块
  */
-extern int arp_changed_callback_unregister(int idx, struct arp_changed_callback *callback_actiona);
+extern int arp_changed_callback_unregister(struct arp_changed_callback *callback_actiona);
 
 /**
  * @brief                   如果三层或者以上的协议确认了该IP的可达性，则调用该函数告诉arp层
