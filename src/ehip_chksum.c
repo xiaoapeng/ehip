@@ -21,12 +21,12 @@
 #endif
 
 
-uint16_t ehip_standard_chksum(const void *dataptr, int len){
+uint16_t ehip_standard_chksum(uint16_t sum_init, const void *dataptr, int len){
     const uint8_t *pos = (const uint8_t *)dataptr;
     const uint8_t *end = pos + len;
     int odd = ((uintptr_t)pos & 1);
     uint16_t tmp0 = 0;
-    uint32_t sum = 0, tmp1;
+    uint32_t sum = sum_init, tmp1;
     
     if(odd && len > 0)
         ((uint8_t *)&tmp0)[1] = *pos++;

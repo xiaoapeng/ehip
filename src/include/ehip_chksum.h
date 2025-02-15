@@ -20,11 +20,16 @@ extern "C"{
 
 #include <stdint.h>
 
-extern uint16_t ehip_standard_chksum(const void *dataptr, int len);
+extern uint16_t ehip_standard_chksum(uint16_t sum_init, const void *dataptr, int len);
 
 static inline uint16_t ehip_inet_chksum(const void *dataptr, int len)
 {
-    return ~ehip_standard_chksum(dataptr, len);
+    return ~ehip_standard_chksum(0x0000, dataptr, len);
+    
+}
+static inline uint16_t ehip_inet_chksum_accumulated(uint16_t sum_init, const void *dataptr, int len)
+{
+    return ~ehip_standard_chksum(~sum_init, dataptr, len);
 }
 
 #ifdef __cplusplus
