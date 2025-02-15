@@ -151,4 +151,9 @@
 #define EHIP_IP_DEFAULT_TTL                                     64
 #endif
 
+#ifndef EHIP_PING_ARP_CHANGED_ACTION_CNT
+#define EHIP_PING_ARP_CHANGED_ACTION_CNT                        4U
+#endif
+
+
 #endif // _EHIP_CONF_H_
