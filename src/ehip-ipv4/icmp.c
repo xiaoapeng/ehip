@@ -13,7 +13,7 @@
 #include <ehip-ipv4/icmp.h>
 #include <ehip-ipv4/ip_message.h>
 
-int icmp_input(struct ip_message *ip_msg){
+void icmp_input(struct ip_message *ip_msg){
     int ret;
     struct icmp_hdr *icmp_hdr;
     struct icmp_hdr icmp_hdr_tmp;
@@ -27,12 +27,12 @@ int icmp_input(struct ip_message *ip_msg){
         case ICMP_TYPE_ECHO:{
             void ping_input(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr);
             ping_input(ip_msg, icmp_hdr);
-            break;
+            return ;
         }
         default:
             break;
     }
 drop:
     ip_message_free(ip_msg);
-    return 0;
+    return ;
 }
