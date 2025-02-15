@@ -8,6 +8,7 @@
  * 
  */
 
+
 #include <stdint.h>
 #include <string.h>
 
@@ -20,10 +21,11 @@
 #include <ehip_netdev.h>
 #include <ehip_buffer.h>
 #include <ehip_module.h>
-#include <ehip-ipv4/ip.h>
-#include <ehip-ipv4/ip_message.h>
 #include <ehip_chksum.h>
 #include <ehip_netdev_trait.h>
+#include <ehip-ipv4/ip.h>
+#include <ehip-ipv4/ip_message.h>
+#include <ehip-mac/hw_addr.h>
 
 eh_static_assert(EHIP_IP_MAX_FRAGMENT_NUM <= 0xFF, "IP fragment number must be less than 0xFF.");
 
@@ -76,7 +78,7 @@ void ip_message_free(struct ip_message *msg){
 
 
 struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
-    uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, struct ehip_max_hw_addr *dts_hw_addr, 
+    uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size){
     struct ip_message * new_msg;
 
@@ -88,8 +90,6 @@ struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
         return NULL;
     memset(new_msg, 0, sizeof(struct ip_message));
     new_msg->flags |= IP_MESSAGE_FLAG_TX;
-    new_msg->tx_param.dts_hw_addr = *dts_hw_addr;
-    memcpy(&new_msg->tx_param.dts_hw_addr, dts_hw_addr, EHIP_ETH_HWADDR_MAX_LEN);
     new_msg->ip_hdr.tos = tos;
     new_msg->ip_hdr.ttl = ttl;
     new_msg->ip_hdr.protocol = protocol;
@@ -114,13 +114,13 @@ eh_mem_pool_free(ip_message_pool, new_msg);
 }
 
 
-int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_size){
+int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_capacity_size){
     ehip_netdev_t *netdev;
     ehip_buffer_t *buffer;
     struct ip_tx_fragment *tx_fragment;
     eh_param_assert(msg_hander);
     eh_param_assert(out_buffer);
-    eh_param_assert(out_buffer_size);
+    eh_param_assert(out_buffer_capacity_size);
     eh_param_assert(ip_message_flag_is_tx(msg_hander));
 
     if(!ip_message_flag_is_fragment(msg_hander)){
@@ -134,7 +134,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
             msg_hander->flags |= IP_MESSAGE_FLAG_TX_BUFFER_INIT;
             msg_hander->buffer->netdev = netdev;
             *out_buffer = buffer;
-            *out_buffer_size = netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr);
+            *out_buffer_capacity_size = netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr);
             return EH_RET_OK;
         }
         /* 修改其为分片模式 */
@@ -159,14 +159,14 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         return EH_RET_MEM_POOL_EMPTY;
     buffer->netdev = netdev;
     *out_buffer = buffer;
-    *out_buffer_size = (netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & 0x7;
+    *out_buffer_capacity_size = (netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & 0x7;
     tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset++] = buffer;
     
     return EH_RET_OK;
 }
 
 
-int ip_message_tx_ready(struct ip_message *msg_hander){
+int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr ){
     ehip_netdev_t *netdev;
     int ret;
     ehip_buffer_t *buffer;
@@ -202,8 +202,8 @@ int ip_message_tx_ready(struct ip_message *msg_hander){
             memcpy(ip_hdr_buffer->options, msg_hander->options_bytes, options_len);
         ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
 
-        ret = ehip_netdev_trait_hard_header( msg_hander->tx_init_netdev, buffer, 
-            ehip_netdev_trait_hw_addr(netdev), &msg_hander->tx_param.dts_hw_addr, 
+        ret = ehip_netdev_trait_hard_header( netdev, buffer, 
+            ehip_netdev_trait_hw_addr(netdev), dst_hw_addr, 
             EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(buffer) );
         if(ret < 0)
             return ret;
@@ -252,7 +252,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander){
         ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(ip_hdr_buffer));
 
         ret = ehip_netdev_trait_hard_header( netdev, buffer, 
-            ehip_netdev_trait_hw_addr(netdev), &msg_hander->tx_param.dts_hw_addr,
+            ehip_netdev_trait_hw_addr(netdev), dst_hw_addr,
             EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(buffer));
         if(ret < 0)
             return ret;
@@ -373,7 +373,7 @@ int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer_t *buf
         fragment_check_offset = fragment_msg->fragment_end_offset;
     }
     fragment->ip_hdr.tot_len = eh_hton16(fragment_check_offset);
-
+    fragment->rx_fragment->fragment_buffer_size = fragment_check_offset;
     return FRAGMENT_REASSE_FINISH;
 drop:
     ehip_buffer_free(buffer);
@@ -448,21 +448,38 @@ ip_message_rx_new_err:
 }
 
 
+int  ip_message_rx_data_size(struct ip_message *msg_hander){
+    eh_param_assert(msg_hander);
+    eh_param_assert(ip_message_flag_is_rx(msg_hander));
+    if(ip_message_flag_is_fragment(msg_hander)){
+        return msg_hander->rx_fragment->fragment_buffer_size;
+    }else{
+        return ehip_buffer_get_payload_size(msg_hander->buffer);
+    }
+}
+
 int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
-    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type){
+    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type, bool is_copy){
 
     // 单次读的最大数据量
     ehip_buffer_size_t              single_max_read_size = 0;
     eh_param_assert(msg_hander);
     eh_param_assert(ip_message_flag_is_rx(msg_hander));
-
+    
     if(!ip_message_flag_is_fragment(msg_hander)){
         single_max_read_size = ehip_buffer_get_payload_size(msg_hander->buffer);
         size = single_max_read_size < size ? single_max_read_size : size;
-        if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP )
-            *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(msg_hander->buffer);
-        if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK )
-            ehip_buffer_payload_reduce(msg_hander->buffer, size);
+        if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP ){
+            if(is_copy){
+                memcpy(out_bak_buffer, ehip_buffer_get_payload_ptr(msg_hander->buffer), size);
+                *out_data = out_bak_buffer;
+            }else{
+                *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(msg_hander->buffer);
+            }
+        }
+        if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK ){
+            ehip_buffer_head_reduce(msg_hander->buffer, size);
+        }
         return size;
     }
     /* 分片模式 */
@@ -475,10 +492,18 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
 
         first_fragment_buffer = &msg_hander->rx_fragment->fragment_info[0];
         if(ehip_buffer_get_payload_size(first_fragment_buffer->fragment_buffer) >= size){
-            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP )
-                *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer);
-            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK )
-                ehip_buffer_payload_reduce(first_fragment_buffer->fragment_buffer, size);
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP ){
+                if(is_copy){
+                    memcpy(out_bak_buffer, ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer), size);
+                    *out_data = out_bak_buffer;
+                }else{
+                    *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer);
+               }
+            }
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK ){
+                ehip_buffer_head_reduce(first_fragment_buffer->fragment_buffer, size);
+                msg_hander->rx_fragment->fragment_buffer_size -= size;
+            }
             return size;
         }
         write_data_ptr = out_bak_buffer;
@@ -491,8 +516,10 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
 
             if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP )
                 memcpy(write_data_ptr, ehip_buffer_get_payload_ptr(buffer), single_max_read_size);
-            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK )
-                ehip_buffer_payload_reduce(buffer, single_max_read_size);
+            if(type != IP_MESSAGE_READ_ADVANCED_TYPE_PEEK ){
+                ehip_buffer_head_reduce(buffer, single_max_read_size);
+                msg_hander->rx_fragment->fragment_buffer_size -= single_max_read_size;
+            }
 
             write_data_ptr += single_max_read_size;
             size -= single_max_read_size;

@@ -11,6 +11,7 @@
 #ifndef _IP_MESSAGE_H_
 #define _IP_MESSAGE_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <eh_types.h>
@@ -43,6 +44,7 @@ struct ip_rx_fragment{
     struct fragment_info    fragment_info[EHIP_IP_MAX_FRAGMENT_NUM];
     uint8_t                 expires_cd;
     uint8_t                 fragment_cnt;
+    ehip_buffer_size_t      fragment_buffer_size;
 };
 
 struct ip_tx_fragment{
@@ -61,9 +63,6 @@ struct ip_message{
         struct ip_tx_fragment          *tx_fragment;        /* 发送分片报文时 */
         ehip_netdev_t                  *tx_init_netdev;
     };
-    struct {
-        struct ehip_max_hw_addr		        dts_hw_addr;
-    }tx_param;
 
 #define   IP_MESSAGE_FLAG_TX                0x00000001            // bit0: 1:发送报文 0:接收报文
 #define   IP_MESSAGE_FLAG_FRAGMENT          0x00000002            // bit1: 1:分片报文 0:不分片报文
@@ -90,12 +89,13 @@ struct ip_message{
  * @param  protocol         协议类型
  * @param  src_addr         源地址
  * @param  dst_addr         目标地址
- * @param  dts_hw_addr      目标硬件地址
+ * @param  options_bytes    选项数据
+ * @param  options_bytes_size  选项数据的长度
  * @return struct ip_message* 
  */
 extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
-    struct ehip_max_hw_addr *dts_hw_addr, uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size);
+     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size);
 
 /**
  * @brief                   往ip tx message中添加一个buffer, 返回的buffer中会自动预留出mac和ip头部的空间
@@ -109,9 +109,10 @@ extern int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t
 /**
  * @brief                   完成一个ip tx message的构建,当调用该函数后，会自动填充全部的mac和ip头部
  * @param  msg_hander       返回由ip_message_tx_new创建的ip_message_t结构体
+ * @param  dst_hw_addr      目标物理地址
  * @return int              成功返回0，失败返回负数
  */
-extern int ip_message_tx_ready(struct ip_message *msg_hander);
+extern int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr);
 
 
 /**
@@ -185,7 +186,7 @@ enum _ip_message_read_advanced_type{
 };
 
 extern int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
-    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type);
+    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type, bool is_copy);
 
 /**
  * @brief                   读取一个ip_message_t中的数据
@@ -198,8 +199,21 @@ extern int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t *
 static inline int ip_message_rx_read(struct ip_message *msg, uint8_t **out_data, 
     ehip_buffer_size_t size, uint8_t *out_bak_buffer){
     return _ip_message_rx_read_advanced(msg, out_data, size, 
-        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ);
+        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ, false);
 }
+/**
+ * @brief                   读取一个ip_message_t中的数据,并直接覆盖到out_data中
+ * @param  msg              msg description
+ * @param  out_data         输出的缓冲区
+ * @param  size             缓冲区大小
+ * @return int              失败返回负数，成功返回读取的数据大小
+ */
+static inline int ip_message_rx_real_read(struct ip_message *msg, uint8_t *out_data, ehip_buffer_size_t size){
+    uint8_t *_out_data = NULL;
+    return _ip_message_rx_read_advanced(msg, &_out_data, size, 
+        out_data, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ, true);
+}
+
 
 /**
  * @brief                   假装读取一个ip_message_t中的数据,读指针偏移
@@ -208,8 +222,15 @@ static inline int ip_message_rx_read(struct ip_message *msg, uint8_t **out_data,
  * @return int              失败返回负数，成功返回读取的数据大小
  */
 static inline int ip_message_rx_read_skip(struct ip_message *msg, ehip_buffer_size_t size){
-    return _ip_message_rx_read_advanced(msg, NULL, size, NULL, IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP);
+    return _ip_message_rx_read_advanced(msg, NULL, size, NULL, IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP, false);
 }
+
+/**
+ * @brief                   获取一个ip_message_t中的数据大小
+ * @param  msg              msg description
+ * @return int              失败返回负数，成功返回读取的数据大小
+ */
+extern int  ip_message_rx_data_size(struct ip_message *msg);
 
 /**
  * @brief                   偷看一个ip_message_t中的数据,不偏移读指针
@@ -222,7 +243,7 @@ static inline int ip_message_rx_read_skip(struct ip_message *msg, ehip_buffer_si
 static inline int ip_message_peek(struct ip_message *msg, uint8_t **out_data, ehip_buffer_size_t size, 
     uint8_t *out_bak_buffer){
     return _ip_message_rx_read_advanced(msg, out_data, size, 
-        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ);
+        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ, false);
 }
 
 #ifdef __cplusplus
