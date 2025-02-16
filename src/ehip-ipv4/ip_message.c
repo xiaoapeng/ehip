@@ -159,7 +159,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         return EH_RET_MEM_POOL_EMPTY;
     buffer->netdev = netdev;
     *out_buffer = buffer;
-    *out_buffer_capacity_size = (netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & 0x7;
+    *out_buffer_capacity_size = (ehip_buffer_size_t)(netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & (ehip_buffer_size_t)(~0x7);
     tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset++] = buffer;
     
     return EH_RET_OK;
@@ -215,7 +215,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
     }
     /* 分片模式 */
     tx_fragment = msg_hander->tx_fragment;
-    if(tx_fragment->fragment_add_offset <= 2){
+    if(tx_fragment->fragment_add_offset < 2){
         return EH_RET_INVALID_STATE;
     }
 
