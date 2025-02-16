@@ -128,8 +128,8 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         if(!ip_message_flag_is_tx_buffer_init(msg_hander)){
             netdev = msg_hander->tx_init_netdev;
             buffer = ehip_buffer_new(netdev->attr.buffer_type, netdev->attr.hw_head_size + ipv4_hdr_len(&msg_hander->ip_hdr));
-            if(buffer == NULL)
-                return EH_RET_MEM_POOL_EMPTY;
+            if(eh_ptr_to_error(buffer) < 0)
+                return eh_ptr_to_error(buffer);
             msg_hander->buffer = buffer;
             msg_hander->flags |= IP_MESSAGE_FLAG_TX_BUFFER_INIT;
             msg_hander->buffer->netdev = netdev;
@@ -155,8 +155,8 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     netdev = tx_fragment->fragment_buffer[0]->netdev;
     buffer = ehip_buffer_new(netdev->attr.buffer_type, 
         netdev->attr.hw_head_size + sizeof(struct ip_hdr));
-    if(buffer == NULL)
-        return EH_RET_MEM_POOL_EMPTY;
+    if(eh_ptr_to_error(buffer))
+        return eh_ptr_to_error(buffer);
     buffer->netdev = netdev;
     *out_buffer = buffer;
     *out_buffer_capacity_size = (ehip_buffer_size_t)(netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & (ehip_buffer_size_t)(~0x7);
