@@ -28,11 +28,11 @@ extern "C"{
 
 typedef struct ehip_general_hw_addr ehip_eth_addr_t;
 
-struct eth_hdr{
+struct __packed eth_hdr{
     ehip_eth_addr_t         dest;
     ehip_eth_addr_t         src;
     uint16_t                type_or_len;
-}eh_aligned(1);
+};
 
 extern const ehip_eth_addr_t ehip_eth_mac_addr_broadcast;
 

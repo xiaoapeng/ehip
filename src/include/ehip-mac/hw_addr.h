@@ -24,11 +24,11 @@ extern "C"{
 #define EHIP_GENERAL_HW_ADDR_LEN  6
 struct ehip_general_hw_addr{
     uint8_t addr[EHIP_GENERAL_HW_ADDR_LEN];
-}eh_aligned(1);
+};
 
 struct ehip_max_hw_addr{
     uint8_t addr[EHIP_ETH_HWADDR_MAX_LEN];
-}eh_aligned(1);
+};
 
 
 typedef void ehip_hw_addr_t;

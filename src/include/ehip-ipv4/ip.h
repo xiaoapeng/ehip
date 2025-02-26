@@ -60,7 +60,7 @@ struct ipv4_netdev{
     uint8_t                     ipv4_addr_num;
 };
 
-struct ip_hdr{
+struct __packed ip_hdr {
 #ifdef __BYTE_ORDER_LITTLE_ENDIAN__
     uint8_t                     ihl:4;
     uint8_t                     version:4;
@@ -91,7 +91,7 @@ struct ip_hdr{
     ipv4_addr_t                 dst_addr;
 #define IP_OPTIONS_MAX_LEN 40
     uint8_t                     options[0]; 
-}eh_aligned(1);
+};
 
 #define ipv4_hdr_offset(hdr) ((uint16_t)((eh_ntoh16((hdr)->frag_off) & IP_FRAG_OFFMASK) << 3))
 #define ipv4_hdr_len(hdr)  ((uint16_t)((hdr)->ihl << 2))
