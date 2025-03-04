@@ -102,7 +102,7 @@ int ipv4_route_add(const struct route_info *route){
     
     eh_list_add_tail(&entry->node, &route_head);
     eh_signal_slot_init(&entry->slot_netdev_status_change, netdev_status_change, entry);
-    /* 注册当网络状态 DOWN时删除改路由 */
+    /* 注册当网络状态 DOWN时删除该路由 */
     eh_signal_slot_connect(&entry->route.netdev->signal_status, &entry->slot_netdev_status_change);
     route_cnt ++;
     return 0;
