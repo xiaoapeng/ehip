@@ -106,7 +106,9 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     dst_addr_or_gw_addr = callback_actiona->out_route.gateway ? 
         callback_actiona->out_route.gateway : ip_msg->ip_hdr.src_addr;
     arp_idx = arp_query(callback_actiona->out_route.netdev, dst_addr_or_gw_addr, -1);
-    if(arp_idx < 0){
+    if(arp_idx == EH_RET_NOT_SUPPORTED){
+        arp_idx = ARP_MARS_IDX;
+    }else if(arp_idx < 0){
         eh_warnfl("arp_query fail %d", arp_idx);
         goto unreachable_target;
     }

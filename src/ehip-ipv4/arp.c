@@ -34,7 +34,7 @@
 #include <ehip-ipv4/ip.h>
 
 EH_DEFINE_SIGNAL(signal_arp_table_changed);
-struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM];
+struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM + 1];
 
 static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *netdev, 
     const ehip_hw_addr_t *s_hw_addr, const ehip_hw_addr_t *d_hw_addr, 
@@ -481,8 +481,11 @@ int arp_query(const ehip_netdev_t *netdev, const ipv4_addr_t ip_addr, int old_id
     struct ipv4_netdev* ipv4_dev;
     
     ipv4_dev = ehip_netdev_trait_ipv4_dev((ehip_netdev_t *)netdev);
-    if(ipv4_dev == NULL || !ipv4_netdev_flags_is_arp_support(ipv4_dev))
+    if(ipv4_dev == NULL )
         return EH_RET_INVALID_PARAM;
+    if(!ipv4_netdev_flags_is_arp_support(ipv4_dev)){
+        return EH_RET_NOT_SUPPORTED;
+    }
 
     if(old_idx_or_minus >= 0 && old_idx_or_minus < (int)EHIP_ARP_CACHE_MAX_NUM && 
         _arp_table[old_idx_or_minus].ip_addr == ip_addr && _arp_table[old_idx_or_minus].netdev == netdev && 
@@ -604,6 +607,12 @@ static int __init arp_init(void){
     for(size_t i=0; i<EHIP_ARP_CACHE_MAX_NUM; i++){
         eh_llist_head_init(&_arp_table[i].callback_list);
     }
+    
+    eh_llist_head_init(&_arp_table[ARP_MARS_IDX].callback_list);
+    memset(&_arp_table[ARP_MARS_IDX].hw_addr, 0xff, sizeof(struct ehip_max_hw_addr));
+    _arp_table[ARP_MARS_IDX].ip_addr = IPV4_ADDR_ANY;
+    _arp_table[ARP_MARS_IDX].netdev = NULL;
+    _arp_table[ARP_MARS_IDX].state = ARP_STATE_NUD_REACHABLE;
     return 0;
 }
 
