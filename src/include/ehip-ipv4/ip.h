@@ -76,6 +76,7 @@ struct __packed ip_hdr {
 #define IP_FRAG_DF              0x4000U         /* don't fragment flag */
 #define IP_FRAG_MF              0x2000U         /* more fragments flag */
 #define IP_FRAG_OFFMASK         0x1fffU         /* mask for fragmenting bits */
+#define IP_FRAG_OFFSET_GRAIN    8
     uint16_be_t                 frag_off;       /* 分片和分片偏移 */
     uint8_t                     ttl;
 
