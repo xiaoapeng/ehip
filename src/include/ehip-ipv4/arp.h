@@ -74,8 +74,11 @@ enum etharp_state{
 #define	ARPOP_InREPLY	9		/* InARP reply			*/
 #define	ARPOP_NAK		10		/* (ATM)ARP NAK			*/
 
+/* 当ipdev不支持ARP时，可使用该项，该项将使用 默认 0xFF*N 的mac地址 */
+#define ARP_MARS_IDX	EHIP_ARP_CACHE_MAX_NUM 
+
 /* arp表， 禁止直接访问 */
-extern struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM];
+extern struct arp_entry _arp_table[];
 
 /**
  * @brief arp表条目变化信号，当有邻近项有效或者无效状态发生变化时会触发该信号
