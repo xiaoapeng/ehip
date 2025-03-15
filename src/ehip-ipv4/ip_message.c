@@ -118,10 +118,12 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     ehip_netdev_t *netdev;
     ehip_buffer_t *buffer;
     struct ip_tx_fragment *tx_fragment;
+    ehip_buffer_size_t old_buffer_capacity;
     eh_param_assert(msg_hander);
     eh_param_assert(out_buffer);
     eh_param_assert(out_buffer_capacity_size);
     eh_param_assert(ip_message_flag_is_tx(msg_hander));
+    eh_param_assert(!ip_message_flag_is_tx_ready(msg_hander));
 
     if(!ip_message_flag_is_fragment(msg_hander)){
         /* 没有进行分片 */
@@ -137,6 +139,17 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
             *out_buffer_capacity_size = netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr);
             return EH_RET_OK;
         }
+
+        /* 查看旧的buffer 是否还有空闲位置，若有则返回上一次的buffer */
+        old_buffer_capacity = (ehip_buffer_size_t)((msg_hander->buffer->netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) - 
+            ehip_buffer_get_payload_size(msg_hander->buffer));
+        if(old_buffer_capacity >= IP_FRAG_OFFSET_GRAIN){
+            *out_buffer = msg_hander->buffer;
+            *out_buffer_capacity_size = old_buffer_capacity;
+            return EH_RET_OK;
+        }
+
+
         /* 修改其为分片模式 */
         tx_fragment = eh_mem_pool_alloc(ip_tx_fragment_pool);
         if(tx_fragment == NULL)
@@ -150,9 +163,19 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     }
     /* 分片模式 */
     tx_fragment = msg_hander->tx_fragment;
+    netdev = tx_fragment->fragment_buffer[0]->netdev;
+    if( tx_fragment->fragment_add_offset != 1 ){
+        /* 查看旧的buffer 是否还有空闲位置，若有则返回上一次的buffer */
+        old_buffer_capacity = (ehip_buffer_size_t)((netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) - 
+            ehip_buffer_get_payload_size(tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset-1]));
+        if(old_buffer_capacity >= IP_FRAG_OFFSET_GRAIN){
+            *out_buffer = tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset-1];
+            *out_buffer_capacity_size = old_buffer_capacity;
+            return EH_RET_OK;
+        }
+    }
     if(tx_fragment->fragment_add_offset >= EHIP_IP_MAX_FRAGMENT_NUM)
         return EH_RET_INVALID_STATE;
-    netdev = tx_fragment->fragment_buffer[0]->netdev;
     buffer = ehip_buffer_new(netdev->attr.buffer_type, 
         netdev->attr.hw_head_size + sizeof(struct ip_hdr));
     if(eh_ptr_to_error(buffer))
