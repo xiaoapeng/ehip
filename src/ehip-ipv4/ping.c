@@ -52,7 +52,7 @@ static enum change_callback_return ping_echo_reply(struct arp_changed_callback *
         return ARP_CALLBACK_CONTINUE;
     }
 
-    ret = ip_message_tx_ready(actiona->echo_ip_reply_msg, &arp_get_table_entry(actiona->action.idx)->hw_addr);
+    ret = ip_message_tx_ready(actiona->echo_ip_reply_msg, &arp_get_table_entry(actiona->action.idx)->hw_addr, NULL);
     if(ret < 0)
         goto ip_message_tx_ready_error;
 
@@ -120,9 +120,9 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
         goto unreachable_target;
     }
 
-    /* 生成回复的 ip报文 */
+    /* 生成回复的 ip报文,header_reserved_size将设置为0，因为下面会将icmp头部当作数据的一部分来处理 */
     ip_msg_reply = ip_message_tx_new(callback_actiona->out_route.netdev, ipv4_make_tos(0, 0), 
-        EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, ip_msg->ip_hdr.dst_addr, ip_msg->ip_hdr.src_addr, NULL, 0);
+        EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, ip_msg->ip_hdr.dst_addr, ip_msg->ip_hdr.src_addr, NULL, 0, 0);
     if(ip_msg_reply == NULL)
         goto unreachable_target;
     

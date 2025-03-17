@@ -79,7 +79,7 @@ void ip_message_free(struct ip_message *msg){
 
 struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
-    uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size){
+    uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size){
     struct ip_message * new_msg;
 
     if(netdev == NULL || (options_bytes && options_bytes_size > IP_OPTIONS_MAX_LEN) ){
@@ -98,6 +98,7 @@ struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     new_msg->ip_hdr.ihl = 0xF & ((sizeof(struct ip_hdr) + options_bytes_size + 3) >> 2);
 
     new_msg->tx_init_netdev = netdev;
+    new_msg->tx_header_size = header_reserved_size;
 
     if(options_bytes && options_bytes_size > 0){
         new_msg->options_bytes = eh_mem_pool_alloc(options_bytes_pool);
@@ -129,7 +130,9 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         /* 没有进行分片 */
         if(!ip_message_flag_is_tx_buffer_init(msg_hander)){
             netdev = msg_hander->tx_init_netdev;
-            buffer = ehip_buffer_new(netdev->attr.buffer_type, netdev->attr.hw_head_size + ipv4_hdr_len(&msg_hander->ip_hdr));
+            buffer = ehip_buffer_new(netdev->attr.buffer_type, 
+                (uint16_t)(netdev->attr.hw_head_size + ipv4_hdr_len(&msg_hander->ip_hdr)) +
+                (uint16_t)msg_hander->tx_header_size);
             if(eh_ptr_to_error(buffer) < 0)
                 return eh_ptr_to_error(buffer);
             msg_hander->buffer = buffer;
@@ -141,7 +144,10 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         }
 
         /* 查看旧的buffer 是否还有空闲位置，若有则返回上一次的buffer */
-        old_buffer_capacity = (ehip_buffer_size_t)((msg_hander->buffer->netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) - 
+        old_buffer_capacity = (ehip_buffer_size_t)(
+            ( msg_hander->buffer->netdev->attr.mtu - 
+                ipv4_hdr_len(&msg_hander->ip_hdr) - 
+                msg_hander->tx_header_size ) -
             ehip_buffer_get_payload_size(msg_hander->buffer));
         if(old_buffer_capacity >= IP_FRAG_OFFSET_GRAIN){
             *out_buffer = msg_hander->buffer;
@@ -189,10 +195,11 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
 }
 
 
-int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr ){
+int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr, const uint8_t *head_data){
     ehip_netdev_t *netdev;
     int ret;
     ehip_buffer_t *buffer;
+    uint8_t *header_data_buffer = NULL;
     struct ip_hdr * ip_hdr_buffer;
     ehip_buffer_size_t options_len;
     ehip_buffer_size_t offset;
@@ -216,6 +223,19 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
         msg_hander->ip_hdr.frag_off = 0;
         msg_hander->ip_hdr.check = 0;
 
+        /* 填充上层（udp/tcp/icmp/igmp等）的头部数据 */
+        if( msg_hander->tx_header_size ){
+            header_data_buffer = ehip_buffer_head_append(buffer, msg_hander->tx_header_size);
+            if(header_data_buffer == NULL)
+                return EH_RET_INVALID_STATE;
+            if(head_data){
+                memcpy(header_data_buffer, head_data, msg_hander->tx_header_size);
+            }else{
+                memset(header_data_buffer, 0, msg_hander->tx_header_size);
+            }
+        }
+
+        /* 填充ip头部数据 */
         ip_hdr_buffer = (struct ip_hdr *)ehip_buffer_head_append(buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
         if(ip_hdr_buffer == NULL)
             return EH_RET_INVALID_STATE;
@@ -247,6 +267,21 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
     msg_hander->ip_hdr.frag_off = 0;
     offset = 0;
     netdev = tx_fragment->fragment_buffer[0]->netdev;
+
+    
+    /* 填充上层（udp/tcp/icmp/igmp等）的头部数据 */
+    if( msg_hander->tx_header_size ){
+        buffer = tx_fragment->fragment_buffer[0];
+        header_data_buffer = ehip_buffer_head_append(buffer, msg_hander->tx_header_size);
+        if(header_data_buffer == NULL)
+            return EH_RET_INVALID_STATE;
+        if(head_data){
+            memcpy(header_data_buffer, head_data, msg_hander->tx_header_size);
+        }else{
+            memset(header_data_buffer, 0, msg_hander->tx_header_size);
+        }
+    }
+
     for(int i = 0; i < tx_fragment->fragment_add_offset; i++){
         buffer = tx_fragment->fragment_buffer[i];
         ipv4_hdr_frag_set(&msg_hander->ip_hdr, offset, 

@@ -64,12 +64,14 @@ struct ip_message{
         ehip_netdev_t                  *tx_init_netdev;
     };
 
-#define   IP_MESSAGE_FLAG_TX                0x00000001            // bit0: 1:发送报文 0:接收报文
-#define   IP_MESSAGE_FLAG_FRAGMENT          0x00000002            // bit1: 1:分片报文 0:不分片报文
-#define   IP_MESSAGE_FLAG_BROKEN            0x00000004            // bit2: 1:破碎的分片报文 0:正常分片报文
-#define   IP_MESSAGE_FLAG_TX_BUFFER_INIT    0x00000008            // bit3: 1:TX_BUFFER已经初始化 0:TX_BUFFER未初始化
-#define   IP_MESSAGE_FLAG_TX_READY          0x00000010            // bit4: 1:TX报文已经准备好 0:TX报文未准备好
-    uint32_t                                flags;
+#define   IP_MESSAGE_FLAG_TX                0x01            // bit0: 1:发送报文 0:接收报文
+#define   IP_MESSAGE_FLAG_FRAGMENT          0x02            // bit1: 1:分片报文 0:不分片报文
+#define   IP_MESSAGE_FLAG_BROKEN            0x04            // bit2: 1:破碎的分片报文 0:正常分片报文
+#define   IP_MESSAGE_FLAG_TX_BUFFER_INIT    0x08            // bit3: 1:TX_BUFFER已经初始化 0:TX_BUFFER未初始化
+#define   IP_MESSAGE_FLAG_TX_READY          0x10            // bit4: 1:TX报文已经准备好 0:TX报文未准备好
+
+    uint8_t                             flags;
+    uint8_t                             tx_header_size;
 };
 
 
@@ -82,20 +84,21 @@ struct ip_message{
 
 
 /**
- * @brief                   创建一个可用于发送的IP报文信息
- * @param  netdev           准备发送该报文的网卡
- * @param  tos              服务类型
- * @param  ttl              生存时间
- * @param  protocol         协议类型
- * @param  src_addr         源地址
- * @param  dst_addr         目标地址
- * @param  options_bytes    选项数据
- * @param  options_bytes_size  选项数据的长度
+ * @brief                        创建一个可用于发送的IP报文信息
+ * @param  netdev                准备发送该报文的网卡
+ * @param  tos                   服务类型
+ * @param  ttl                   生存时间
+ * @param  protocol              协议类型
+ * @param  src_addr              源地址
+ * @param  dst_addr              目标地址
+ * @param  options_bytes         选项数据
+ * @param  options_bytes_size    选项数据的长度
+ * @param  header_reserved_size  预留的头部空间大小
  * @return struct ip_message* 
  */
 extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
-     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size);
+     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size);
 
 /**
  * @brief                   往ip tx message中添加一个buffer, 返回的buffer中会自动预留出mac和ip头部的空间
@@ -112,7 +115,7 @@ extern int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t
  * @param  dst_hw_addr      目标物理地址
  * @return int              成功返回0，失败返回负数
  */
-extern int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr);
+extern int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr, const uint8_t *head_data);
 
 
 /**
