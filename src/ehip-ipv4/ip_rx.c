@@ -31,7 +31,7 @@
 
 struct ip_message *ip_fragment_reasse_tab[EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM];
 
-int ip_fragment_find(const struct ip_hdr *ip_hdr){
+static int ip_fragment_find(const struct ip_hdr *ip_hdr){
     uint8_t old_expires_cd = 0xFF;
     int old_index = -1;             /* 最旧的分片记录号 */
     int null_index = -1;            /* 空闲的分片记录号 */

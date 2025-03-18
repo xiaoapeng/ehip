@@ -23,6 +23,7 @@
 #include <ehip-ipv4/arp.h>
 #include <ehip-ipv4/route.h>
 #include <ehip-ipv4/icmp.h>
+#include <ehip-ipv4/ip_tx.h>
 
 
 struct arp_changed_action{
@@ -40,9 +41,6 @@ static eh_mem_pool_t action_pool;
  */
 static enum change_callback_return ping_echo_reply(struct arp_changed_callback *callback_actiona){
     int ret;
-    int tmp_i;
-    ehip_buffer_t *pos_buffer;
-    ehip_buffer_t *tx_pos_buffer;
     struct arp_changed_action *actiona = eh_container_of(callback_actiona, struct arp_changed_action, action);
 
     if(!arp_entry_neigh_is_valid(actiona->action.idx)){
@@ -56,15 +54,9 @@ static enum change_callback_return ping_echo_reply(struct arp_changed_callback *
     if(ret < 0)
         goto ip_message_tx_ready_error;
 
-    if(ip_message_flag_is_fragment(actiona->echo_ip_reply_msg)){
-        ip_message_tx_fragment_for_each(pos_buffer, tmp_i, actiona->echo_ip_reply_msg){
-            tx_pos_buffer = ehip_buffer_ref_dup(pos_buffer);
-            ehip_queue_tx(tx_pos_buffer);
-        }
-    }else{
-        tx_pos_buffer = ehip_buffer_ref_dup(actiona->echo_ip_reply_msg->buffer);
-        ehip_queue_tx(tx_pos_buffer);
-    }
+    ip_tx(actiona->echo_ip_reply_msg);
+    eh_mem_pool_free(action_pool, actiona);
+    return ARP_CALLBACK_ABORT;
     
 ip_message_tx_ready_error:
 arp_query_fail:
