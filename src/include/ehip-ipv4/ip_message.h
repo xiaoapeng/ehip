@@ -249,6 +249,15 @@ static inline int ip_message_peek(struct ip_message *msg, uint8_t **out_data, eh
         out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ, false);
 }
 
+/**
+ * @brief                   获取ip_message中的网卡设备
+ * @param  msg              msg description
+ * @return ehip_netdev_t
+ */
+extern ehip_netdev_t *ip_message_get_netdev(struct ip_message *msg);
+
+
+
 #ifdef __cplusplus
 #if __cplusplus
 }

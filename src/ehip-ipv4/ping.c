@@ -82,16 +82,17 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     ehip_buffer_size_t data_size;
     ehip_buffer_size_t single_data_size;
     uint8_t *write_ptr;
+    ehip_netdev_t *in_netdev;
     callback_actiona = eh_mem_pool_alloc(action_pool);
     if(callback_actiona == NULL){
         goto eh_mem_pool_alloc_fail;
     }
 
     /* 准备回复 */
-    
+    in_netdev = ip_message_get_netdev(ip_msg);
     /* 查路由表，找到最佳路径 */
-    route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, &callback_actiona->out_route);
-    if(route_type != ROUTE_TABLE_UNICAST && route_type != ROUTE_TABLE_ANYCAST){
+    route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, in_netdev, &callback_actiona->out_route, NULL);
+    if(route_type != ROUTE_TABLE_UNICAST){
         goto unreachable_target;
     }
 

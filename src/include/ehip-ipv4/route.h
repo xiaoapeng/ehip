@@ -24,7 +24,6 @@ enum route_table_type{
     ROUTE_TABLE_UNREACHABLE,          /* 网络不可达 */
     ROUTE_TABLE_MULTICAST,            /* 多播 */
     ROUTE_TABLE_BROADCAST,            /* 广播 */
-    ROUTE_TABLE_ANYCAST,              /* 发送时单播，接收时作为广播  */
     ROUTE_TABLE_UNICAST,              /* 单播 */
     ROUTE_TABLE_LOCAL,                /* 本地地址 */
     ROUTE_TABLE_LOCAL_SELF,           /* 本接口地址 */
@@ -61,12 +60,15 @@ extern int ipv4_route_del(const struct route_info *route);
 extern int ipv4_route_to_array(struct route_info **route_array);
 
 /**
- * @brief                   查找路由
- * @param  dst_addr         目标地址
- * @param  route            路由表项信息
- * @return int              成功返回  ROUTE_TABLE_XXX
+ * @brief                       查找路由
+ * @param  dst_addr             目标地址
+ * @param  dst_netdev_or_null   目标网卡，如果为NULL则可以匹配任意网卡
+ * @param  route                路由表项信息
+ * @param  best_src_addr        建议的最佳源地址
+ * @return int                  成功返回  ROUTE_TABLE_XXX
  */
-extern enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, struct route_info *route);
+extern enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_t *dst_netdev_or_null, 
+        struct route_info *route, ipv4_addr_t *best_src_addr);
 
 /**
  * @brief                   接收数据时路由验证
@@ -78,16 +80,6 @@ extern enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, struct rout
  */
 enum route_table_type ipv4_route_input(ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
     ehip_netdev_t *netdev, struct route_info *route);
-
-/**
- * @brief                   查找路由表项的源ip
- * @param  route            路由表项信息，由 ipv4_route_lookup 参数 返回的结果
- * @return ipv4_addr_t      成功返回源ip地址 失败返回0
- */
-extern ipv4_addr_t ipv4_route_best_src_ip(const struct route_info *route);
-
-
-
 
 
 #ifdef __cplusplus

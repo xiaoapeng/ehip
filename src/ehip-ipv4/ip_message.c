@@ -590,6 +590,28 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
 
 }
 
+
+ehip_netdev_t *ip_message_get_netdev(struct ip_message *msg){
+    if(msg == NULL) return NULL;
+    ehip_buffer_t *fragment_buffer;
+    if(ip_message_flag_is_rx(msg)){
+        if(ip_message_flag_is_fragment(msg)){
+            fragment_buffer = msg->rx_fragment->fragment_info[0].fragment_buffer;
+            return fragment_buffer ? fragment_buffer->netdev : NULL;
+        }
+        return msg->buffer->netdev;
+    }
+    if(!ip_message_flag_is_tx_buffer_init(msg)){
+        return msg->tx_init_netdev;
+    }
+    if(ip_message_flag_is_fragment(msg)){
+        fragment_buffer = msg->tx_fragment->fragment_buffer[0];
+        return fragment_buffer ? fragment_buffer->netdev : NULL;
+    }
+    return msg->buffer->netdev;
+}
+
+
 static int __init ip_message_pool_init(void)
 {
     int ret;

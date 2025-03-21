@@ -37,20 +37,29 @@ bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev, ipv4_add
     return ipv4_netdev_addr_index(ipv4_dev, ipv4_addr) < 0 ? false : true;
 }
 
-// 通过子网掩码和目标IP匹配最好的IP
-ipv4_addr_t ipv4_netdev_get_best_ipv4_addr(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t dst_addr, 
-    uint8_t mask_len){
+// 通过目标IP匹配最好的IP地址索引
+int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t dst_addr){
     int i;
-    uint32_t mask = ipv4_mask_len_to_mask(mask_len);
+    uint32_t mask;
 
     for(i = 0; 0 < ipv4_dev->ipv4_addr_num; i++){
+        mask = ipv4_mask_len_to_mask(ipv4_dev->ipv4_mask_len[i]);
         if( ipv4_dev->ipv4_addr[i] && 
-            ipv4_dev->ipv4_mask_len[i] == mask_len &&
             (ipv4_dev->ipv4_addr[i] & mask) == (dst_addr & mask)){
-            return ipv4_dev->ipv4_addr[i];
+            return i;
         }
     }
-    return IPV4_ADDR_ANY;
+    return -1;
+}
+
+//通过IP地址匹配地址索引
+int ipv4_netdev_get_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t ipv4_addr){
+    int i;
+    for(i = 0; i < ipv4_dev->ipv4_addr_num; i++){
+        if(ipv4_dev->ipv4_addr[i] == ipv4_addr)
+            return i;
+    }
+    return -1;
 }
 
 

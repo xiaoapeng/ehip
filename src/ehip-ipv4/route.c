@@ -67,10 +67,10 @@ static struct route_table_entry * ehip_ipv4_route_find(const struct route_info *
     return NULL;
 }
 
-static uint32_t ehip_ipv4_route_entry_match_level(ipv4_addr_t dst_addr, struct route_table_entry *entry){
+static uint32_t ehip_ipv4_route_entry_match_level(ipv4_addr_t dst_addr, const struct route_table_entry *entry, const struct ehip_netdev *dst_netdev_or_null){
     uint32_t level = 0;
     uint32_t mask = ipv4_mask_len_to_mask(entry->route.mask_len);
-    if((entry->route.dst_addr & mask) != (dst_addr & mask))
+    if((entry->route.dst_addr & mask) != (dst_addr & mask) || (dst_netdev_or_null && entry->route.netdev != dst_netdev_or_null))
         return 0;
     /* 目标匹配 */
 
@@ -90,7 +90,9 @@ static uint32_t ehip_ipv4_route_entry_match_level(ipv4_addr_t dst_addr, struct r
 
 int ipv4_route_add(const struct route_info *route){
     struct route_table_entry *entry;
-    
+    eh_param_assert(route);
+    eh_param_assert(route->mask_len <= 32);
+
     if(ehip_ipv4_route_find(route))
         return EH_RET_EXISTS;
     
@@ -118,11 +120,15 @@ int ipv4_route_del(const struct route_info *route){
     return 0;
 }
 
-enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, struct route_info *route){
+enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_t *dst_netdev_or_null, 
+    struct route_info *route, ipv4_addr_t *best_src_addr){
     struct route_table_entry *pos;
     struct route_table_entry *best = NULL;
     uint32_t match_level = 0;               /* match level 越高则匹配优先级越高 */
     uint32_t match_level_tmp = 0;           /* match level 越高则匹配优先级越高 */
+    int ip_idx;
+    struct ipv4_netdev* ipv4_dev;
+    ipv4_addr_t best_src_addr_tmp;
 
     if(ipv4_is_global_bcast(dst_addr) || ipv4_is_zeronet(dst_addr)){
         return ROUTE_TABLE_BROADCAST;
@@ -137,7 +143,7 @@ enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, struct route_info 
     /* 如果设计了哈希表，先查哈希表，没有就遍历路由表 TODO */
 
     eh_list_for_each_entry(pos, &route_head, node){
-        match_level_tmp = ehip_ipv4_route_entry_match_level(dst_addr, pos);
+        match_level_tmp = ehip_ipv4_route_entry_match_level(dst_addr, pos, dst_netdev_or_null);
         if(match_level_tmp > match_level){
             match_level = match_level_tmp;
             best = pos;
@@ -147,9 +153,37 @@ enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, struct route_info 
     if(!best)
         return ROUTE_TABLE_UNREACHABLE;
     *route = best->route;
-    if(route->mask_len < 32 && ipv4_is_local_broadcast(dst_addr, route->mask_len))
-        return ROUTE_TABLE_ANYCAST;
-    return ROUTE_TABLE_UNICAST;
+
+    ipv4_dev = ehip_netdev_trait_ipv4_dev(route->netdev);
+    if(route->gateway != IPV4_ADDR_ANY){
+        /* 如果是有网关 */
+        if(route->src_addr != IPV4_ADDR_ANY){
+            if(best_src_addr)
+                *best_src_addr = route->src_addr;
+            return ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, route->src_addr) ? 
+                ROUTE_TABLE_UNICAST : ROUTE_TABLE_UNREACHABLE;
+        }
+        best_src_addr_tmp = ipv4_netdev_get_addr(ipv4_dev);
+        if(best_src_addr_tmp == IPV4_ADDR_ANY)
+            return ROUTE_TABLE_UNREACHABLE;
+        if(best_src_addr)
+            *best_src_addr = best_src_addr_tmp;
+        return ROUTE_TABLE_UNICAST;
+    }
+
+    /* 如果是直连路由，则需要检查是否是广播地址，顺便得到最合适的源ip */
+    if(route->src_addr == IPV4_ADDR_ANY){
+        ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, dst_addr);
+    }else{
+        ip_idx = ipv4_netdev_get_ipv4_addr_idx(ipv4_dev, route->src_addr);
+    }
+    if(ip_idx < 0)
+        return ROUTE_TABLE_UNREACHABLE;
+
+    if(best_src_addr)
+        *best_src_addr = ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, ip_idx);
+    return ipv4_is_local_broadcast(dst_addr, ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, ip_idx)) ? 
+                ROUTE_TABLE_BROADCAST : ROUTE_TABLE_UNICAST;
 }
 
 
@@ -179,22 +213,11 @@ enum route_table_type ipv4_route_input(ipv4_addr_t src_addr, ipv4_addr_t dst_add
     }
 
     if(route)
-        ret = ipv4_route_lookup(dst_addr, route);
+        ret = ipv4_route_lookup(dst_addr, NULL, route, NULL);
 out:
     return ret;
 }
 
-ipv4_addr_t ipv4_route_best_src_ip(const struct route_info *route){
-    ipv4_addr_t src_ip;
-    struct ipv4_netdev* ipv4_dev = ehip_netdev_trait_ipv4_dev(route->netdev);
-    if(ipv4_dev == NULL)
-        return IPV4_ADDR_ANY;
-    if(ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, route->src_addr))
-        return route->src_addr;
-    if(route->mask_len && (src_ip = ipv4_netdev_get_best_ipv4_addr(ipv4_dev, route->dst_addr, route->mask_len)))
-        return src_ip;
-    return ipv4_netdev_get_addr(ipv4_dev);
-}
 
 static int __init ehip_ipv4_route_init(void)
 {

@@ -252,13 +252,29 @@ extern bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev,ip
 
 /**
  * @brief                     获取最佳匹配的IP地址
- * @param  netdev           网络设备
- * @param  dst_addr            目标地址
- * @param  mask_len         掩码位数
- * @return ipv4_addr_t         失败返回IPV4_ADDR_ANY 成功返回最佳接口地址
+ * @param  netdev             网络设备
+ * @param  dst_addr           目标地址
+ * @return ipv4_addr_t        失败返回IPV4_ADDR_ANY 成功返回最佳接口地址
  */
-extern ipv4_addr_t ipv4_netdev_get_best_ipv4_addr(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t dst_addr, 
-    uint8_t mask_len);
+extern int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t dst_addr );
+
+/**
+ * @brief                     通过索引获取接口的网络地址
+ */
+#define ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_addr[idx])
+
+/**
+ * @brief                     通过索引获取接口的网络地址掩码长度
+ */
+#define ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_mask_len[idx])
+
+/**
+ * @brief                     通过地址获取接口的网络地址索引
+ * @param  ipv4_dev           网络设备
+ * @param  addr               接口ip地址
+ * @return int 
+ */
+extern int ipv4_netdev_get_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr);
 
 /**
  * @brief                     获取接口的网络地址

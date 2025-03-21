@@ -215,7 +215,6 @@ static void ip_handle(struct ehip_buffer* buf){
                 goto drop;
         case ROUTE_TABLE_BROADCAST:
             break;
-        case ROUTE_TABLE_ANYCAST:
         case ROUTE_TABLE_UNICAST:
             if(!ipv4_netdev_flags_is_forward_support(ipv4_dev))
                 goto drop;
