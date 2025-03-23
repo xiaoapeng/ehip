@@ -23,7 +23,8 @@ extern "C"{
 enum route_table_type{
     ROUTE_TABLE_UNREACHABLE,          /* 网络不可达 */
     ROUTE_TABLE_MULTICAST,            /* 多播 */
-    ROUTE_TABLE_BROADCAST,            /* 广播 */
+    ROUTE_TABLE_BROADCAST,            /* 全局广播 */
+    ROUTE_TABLE_LBROADCAST,           /* 局域广播 */
     ROUTE_TABLE_UNICAST,              /* 单播 */
     ROUTE_TABLE_LOCAL,                /* 本地地址 */
     ROUTE_TABLE_LOCAL_SELF,           /* 本接口地址 */

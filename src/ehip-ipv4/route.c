@@ -183,7 +183,7 @@ enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_
     if(best_src_addr)
         *best_src_addr = ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, ip_idx);
     return ipv4_is_local_broadcast(dst_addr, ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, ip_idx)) ? 
-                ROUTE_TABLE_BROADCAST : ROUTE_TABLE_UNICAST;
+        ROUTE_TABLE_LBROADCAST : ROUTE_TABLE_UNICAST;
 }
 
 
@@ -198,6 +198,10 @@ enum route_table_type ipv4_route_input(ipv4_addr_t src_addr, ipv4_addr_t dst_add
         goto out;
     }
 
+    if(ipv4_is_global_bcast(dst_addr) || ipv4_is_zeronet(dst_addr)){
+        return ROUTE_TABLE_BROADCAST;
+    }
+
     ipv4_dev = ehip_netdev_trait_ipv4_dev(netdev);
     if(ipv4_dev == NULL){
         ret = ROUTE_TABLE_UNREACHABLE;
@@ -209,6 +213,12 @@ enum route_table_type ipv4_route_input(ipv4_addr_t src_addr, ipv4_addr_t dst_add
      */
     if(ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, dst_addr)){
         ret = ROUTE_TABLE_LOCAL_SELF;
+        goto out;
+    }
+
+    /* 检查是否为本地广播地址 */
+    if(ipv4_netdev_is_local_broadcast(ipv4_dev, dst_addr)){
+        ret = ROUTE_TABLE_LBROADCAST;
         goto out;
     }
 

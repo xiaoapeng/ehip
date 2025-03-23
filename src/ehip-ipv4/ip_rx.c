@@ -213,8 +213,6 @@ static void ip_handle(struct ehip_buffer* buf){
         case ROUTE_TABLE_MULTICAST:
             /* 判断是否为本机的多播报文 */
                 goto drop;
-        case ROUTE_TABLE_BROADCAST:
-            break;
         case ROUTE_TABLE_UNICAST:
             if(!ipv4_netdev_flags_is_forward_support(ipv4_dev))
                 goto drop;
@@ -225,6 +223,8 @@ static void ip_handle(struct ehip_buffer* buf){
             if(!ipv4_netdev_flags_is_forward_support(ipv4_dev))
                 goto drop;
         case ROUTE_TABLE_LOCAL_SELF:
+        case ROUTE_TABLE_BROADCAST:
+        case ROUTE_TABLE_LBROADCAST:
             break;
     }
 
