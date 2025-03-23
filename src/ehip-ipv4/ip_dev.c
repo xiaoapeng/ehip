@@ -37,6 +37,13 @@ bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev, ipv4_add
     return ipv4_netdev_addr_index(ipv4_dev, ipv4_addr) < 0 ? false : true;
 }
 
+
+bool ipv4_netdev_is_local_broadcast(const struct ipv4_netdev* ipv4_dev,ipv4_addr_t ipv4_addr){
+    int ip_idx;
+    ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, ipv4_addr);
+    return ip_idx >= 0 && ipv4_is_local_broadcast(ipv4_addr, ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, ip_idx));
+}
+
 // 通过目标IP匹配最好的IP地址索引
 int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t dst_addr){
     int i;

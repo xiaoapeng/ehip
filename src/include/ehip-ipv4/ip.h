@@ -251,6 +251,15 @@ static inline bool ipv4_is_class_d(ipv4_addr_t addr)
 extern bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev,ipv4_addr_t ipv4_addr);
 
 /**
+ * @brief                     判断IP地址是否为本设备的广播地址
+ * @param  netdev           网络设备
+ * @param  ipv4_addr        
+ * @return true 
+ * @return false 
+ */
+extern bool ipv4_netdev_is_local_broadcast(const struct ipv4_netdev* ipv4_dev,ipv4_addr_t ipv4_addr);
+
+/**
  * @brief                     获取最佳匹配的IP地址
  * @param  netdev             网络设备
  * @param  dst_addr           目标地址
