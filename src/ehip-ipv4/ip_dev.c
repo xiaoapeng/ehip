@@ -25,16 +25,8 @@ static uint8_t ipv4_addr_default_mask_len(ipv4_addr_t addr){
         IPV4_ADDR_DEFAULT_CLASS_D_MASK_LEN;
 }
 
-static int ipv4_netdev_addr_index(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr){
-    for(int i = 0; i < ipv4_dev->ipv4_addr_num; i++){
-        if(ipv4_dev->ipv4_addr[i] == addr)
-            return i;
-    }
-    return EH_RET_NOT_EXISTS;
-}
-
 bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t ipv4_addr){
-    return ipv4_netdev_addr_index(ipv4_dev, ipv4_addr) < 0 ? false : true;
+    return ipv4_netdev_get_ipv4_addr_idx(ipv4_dev, ipv4_addr) < 0 ? false : true;
 }
 
 
@@ -66,7 +58,7 @@ int ipv4_netdev_get_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_
         if(ipv4_dev->ipv4_addr[i] == ipv4_addr)
             return i;
     }
-    return -1;
+    return EH_RET_NOT_EXISTS;
 }
 
 
@@ -104,7 +96,7 @@ int ipv4_netdev_set_sub_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr, uin
 void ipv4_netdev_del_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr){
     int i;
     int move_num;
-    i = ipv4_netdev_addr_index(ipv4_dev, addr);
+    i = ipv4_netdev_get_ipv4_addr_idx(ipv4_dev, addr);
     if( i < 0 || 
         (move_num = ipv4_dev->ipv4_addr_num - ((uint8_t)i+1) <= 0)
     ) return ;
