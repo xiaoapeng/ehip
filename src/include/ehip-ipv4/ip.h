@@ -19,7 +19,7 @@
 #include <eh_list.h>
 #include <eh_types.h>
 #include <ehip_conf.h>
-
+#include <ehip_netdev.h>
 
 
 #ifdef __cplusplus
@@ -58,6 +58,7 @@ struct ipv4_netdev{
     uint32_t                    attr_flags;
     uint8_t                     ipv4_mask_len[EHIP_NETDEV_MAX_IP_NUM];
     uint8_t                     ipv4_addr_num;
+    ehip_netdev_t               *netdev;
 };
 
 struct __packed ip_hdr {
@@ -138,8 +139,9 @@ struct __packed ip_hdr {
 #define ipv4_netdev_flags_set(netdev, flags) ((netdev)->attr_flags |= (flags))
 #define ipv4_netdev_flags_clear(netdev, flags) ((netdev)->attr_flags &= ~(flags))
 
-static inline void _ipv4_netdev_reset(struct ipv4_netdev *netdev){
-    netdev->ipv4_addr_num = 0;
+static inline void _ipv4_netdev_reset(struct ipv4_netdev *ipv4_netdev, ehip_netdev_t *netdev){
+    ipv4_netdev->ipv4_addr_num = 0;
+    ipv4_netdev->netdev = netdev;
 }
 
 extern void _ipv4_netdev_up(struct ipv4_netdev *netdev);
@@ -242,8 +244,8 @@ static inline bool ipv4_is_class_d(ipv4_addr_t addr)
 
 
 /**
- * @brief                     判断IP地址是否为该设备的有效地址
- * @param  netdev           网络设备
+ * @brief                       判断IP地址是否为该设备的有效地址
+ * @param  netdev               网络设备
  * @param  ipv4_addr        
  * @return true 
  * @return false 
@@ -251,8 +253,8 @@ static inline bool ipv4_is_class_d(ipv4_addr_t addr)
 extern bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev,ipv4_addr_t ipv4_addr);
 
 /**
- * @brief                     判断IP地址是否为本设备的广播地址
- * @param  netdev           网络设备
+ * @brief                       判断IP地址是否为本设备的广播地址
+ * @param  netdev               网络设备
  * @param  ipv4_addr        
  * @return true 
  * @return false 
@@ -260,67 +262,75 @@ extern bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev,ip
 extern bool ipv4_netdev_is_local_broadcast(const struct ipv4_netdev* ipv4_dev,ipv4_addr_t ipv4_addr);
 
 /**
- * @brief                     获取最佳匹配的IP地址
- * @param  netdev             网络设备
- * @param  dst_addr           目标地址
- * @return ipv4_addr_t        失败返回IPV4_ADDR_ANY 成功返回最佳接口地址
+ * @brief                       获取最佳匹配的IP地址
+ * @param  netdev               网络设备
+ * @param  dst_addr             目标地址
+ * @return ipv4_addr_t          失败返回IPV4_ADDR_ANY 成功返回最佳接口地址
  */
 extern int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t dst_addr );
 
 /**
- * @brief                     通过索引获取接口的网络地址
+ * @brief                       通过索引获取接口的网络地址
  */
 #define ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_addr[idx])
 
 /**
- * @brief                     通过索引获取接口的网络地址掩码长度
+ * @brief                       通过索引获取接口的网络地址掩码长度
  */
 #define ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_mask_len[idx])
 
 /**
- * @brief                     通过地址获取接口的网络地址索引
- * @param  ipv4_dev           网络设备
- * @param  addr               接口ip地址
+ * @brief                       通过地址获取接口的网络地址索引
+ * @param  ipv4_dev             网络设备
+ * @param  addr                 接口ip地址
  * @return int 
  */
 extern int ipv4_netdev_get_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr);
 
 /**
- * @brief                     获取接口的网络地址
- * @param  ipv4_dev         ipv4设备
- * @return ipv4_addr_t         失败返回IPV4_ADDR_ANY 成功返回第一个接口地址
+ * @brief                       获取接口的网络地址
+ * @param  ipv4_dev             ipv4设备
+ * @return ipv4_addr_t          失败返回IPV4_ADDR_ANY 成功返回第一个接口地址
  */
 extern ipv4_addr_t ipv4_netdev_get_addr(const struct ipv4_netdev* ipv4_dev);
 
 /**
- * @brief                     设置接口主要网络地址
- * @param  ipv4_dev         ipv4设备
- * @param  addr             要设置的IP地址
- * @param  mask_len         掩码，如果设置为0，则根据IP类型使用默认掩码
+ * @brief                       设置接口主要网络地址
+ * @param  ipv4_dev             ipv4设备
+ * @param  addr                 要设置的IP地址
+ * @param  mask_len             掩码，如果设置为0，则根据IP类型使用默认掩码
  */
 extern int ipv4_netdev_set_main_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr, uint8_t mask_len);
 
 /**
- * @brief                     设置接口次要网络地址
- * @param  ipv4_dev         ipv4设备
- * @param  addr             要设置的IP地址
- * @param  mask_len         掩码，如果设置为0，则根据IP类型使用默认掩码
+ * @brief                       设置接口次要网络地址
+ * @param  ipv4_dev             ipv4设备
+ * @param  addr                 要设置的IP地址
+ * @param  mask_len             掩码，如果设置为0，则根据IP类型使用默认掩码
  */
 extern int ipv4_netdev_set_sub_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr, uint8_t mask_len);
 
 /**
- * @brief                     删除接口网络地址
- * @param  ipv4_dev         ipv4设备
- * @param  addr             要删除的IP地址
+ * @brief                       删除接口网络地址
+ * @param  ipv4_dev             ipv4设备
+ * @param  addr                 要删除的IP地址
  */
 extern void ipv4_netdev_del_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr);
 
 /**
- * @brief                     判断地址是否为本地地址
- * @param  addr             要判断的ip地址
+ * @brief                       从IPv4地址查找网络设备
+ * @param  addr                 ip地址
  * @return int 
  */
-extern bool ipv4_netdev_is_local_addr(ipv4_addr_t addr);
+extern struct ipv4_netdev* ipv4_find_netdev_from_ipv4(ipv4_addr_t addr);
+
+/**
+ * @brief                       获取IPv4设备对应的网络设备
+ * @param  ipv4_dev             ipv4设备
+ */
+#define ipv4_get_parent_netdev(ipv4_dev) ((ipv4_dev)->netdev)
+
+
 
 #ifdef __cplusplus
 #if __cplusplus

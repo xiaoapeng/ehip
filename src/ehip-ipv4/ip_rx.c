@@ -224,7 +224,6 @@ static void ip_handle(struct ehip_buffer* buf){
                 goto drop;
         case ROUTE_TABLE_LOCAL_SELF:
         case ROUTE_TABLE_BROADCAST:
-        case ROUTE_TABLE_LBROADCAST:
             break;
     }
 

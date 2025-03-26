@@ -106,14 +106,13 @@ void ipv4_netdev_del_addr(struct ipv4_netdev* ipv4_dev, ipv4_addr_t addr){
     return ;
 }
 
-
-bool ipv4_netdev_is_local_addr(ipv4_addr_t addr){
+struct ipv4_netdev* ipv4_find_netdev_from_ipv4(ipv4_addr_t addr){
     struct ipv4_netdev *pos;
     eh_list_for_each_entry(pos, &s_ipv4_dev_head, node){
         if(ipv4_netdev_is_ipv4_addr_valid(pos, addr))
-            return true;
+            return pos;
     }
-    return false;
+    return NULL;
 }
 
 
