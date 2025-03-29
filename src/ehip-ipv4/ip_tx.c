@@ -17,7 +17,7 @@ void ip_tx(struct ip_message *ip_msg){
     ehip_buffer_t *pos_buffer;
     ehip_buffer_t *tx_pos_buffer;
     int tmp_i;
-    if(!ip_message_flag_is_tx(ip_msg))
+    if(!ip_message_flag_is_tx(ip_msg) || !ip_message_flag_is_tx_ready(ip_msg))
         goto quit;
     
     if(ip_message_flag_is_fragment(ip_msg)){

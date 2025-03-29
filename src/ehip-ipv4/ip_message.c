@@ -139,7 +139,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
             msg_hander->flags |= IP_MESSAGE_FLAG_TX_BUFFER_INIT;
             msg_hander->buffer->netdev = netdev;
             *out_buffer = buffer;
-            *out_buffer_capacity_size = netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr);
+            *out_buffer_capacity_size = (ehip_buffer_size_t)(netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr) - (ehip_buffer_size_t)msg_hander->tx_header_size);
             return EH_RET_OK;
         }
 
@@ -217,12 +217,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
 
         netdev = buffer->netdev;
 
-        msg_hander->ip_hdr.version = 4;
-        msg_hander->ip_hdr.id = get_ip_message_id();
-        msg_hander->ip_hdr.tot_len = eh_hton16(ehip_buffer_get_payload_size(buffer) + ipv4_hdr_len(&msg_hander->ip_hdr));
-        msg_hander->ip_hdr.frag_off = 0;
-        msg_hander->ip_hdr.check = 0;
-
+        
         /* 填充上层（udp/tcp/icmp/igmp等）的头部数据 */
         if( msg_hander->tx_header_size ){
             header_data_buffer = ehip_buffer_head_append(buffer, msg_hander->tx_header_size);
@@ -234,6 +229,12 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
                 memset(header_data_buffer, 0, msg_hander->tx_header_size);
             }
         }
+
+        msg_hander->ip_hdr.version = 4;
+        msg_hander->ip_hdr.id = get_ip_message_id();
+        msg_hander->ip_hdr.tot_len = eh_hton16(ehip_buffer_get_payload_size(buffer) + ipv4_hdr_len(&msg_hander->ip_hdr));
+        msg_hander->ip_hdr.frag_off = 0;
+        msg_hander->ip_hdr.check = 0;
 
         /* 填充ip头部数据 */
         ip_hdr_buffer = (struct ip_hdr *)ehip_buffer_head_append(buffer, ipv4_hdr_len(&msg_hander->ip_hdr));

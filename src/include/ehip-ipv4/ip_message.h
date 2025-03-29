@@ -93,7 +93,7 @@ struct ip_message{
  * @param  dst_addr              目标地址
  * @param  options_bytes         选项数据
  * @param  options_bytes_size    选项数据的长度
- * @param  header_reserved_size  预留的头部空间大小
+ * @param  header_reserved_size  预留的头部空间大小,此空间一般用于UDP/TCP等协议的头部
  * @return struct ip_message* 
  */
 extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
@@ -101,7 +101,7 @@ extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
      uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size);
 
 /**
- * @brief                   往ip tx message中添加一个buffer, 返回的buffer中会自动预留出mac和ip头部的空间
+ * @brief                   往ip tx message中添加一个buffer
  * @param  msg_hander       返回由ip_message_tx_new创建的ip_message_t结构体
  * @param  out_buffer       返回的buffer
  * @param  out_buffer_size  返回的此buffer可填充的大小

@@ -35,33 +35,33 @@ struct arp_changed_action{
 static eh_mem_pool_t action_pool;
 
 /**
- * @brief       回复ping请求,也作为ARP回调的函数，此函数返回时要消耗掉callback_actiona
- * @param  callback_actiona 
+ * @brief       回复ping请求,也作为ARP回调的函数，此函数返回时要消耗掉callback_action
+ * @param  callback_action 
  * @return enum change_callback_return 
  */
-static enum change_callback_return ping_echo_reply(struct arp_changed_callback *callback_actiona){
+static enum change_callback_return arp_callback_ping_echo_reply(struct arp_changed_callback *callback_action){
     int ret;
-    struct arp_changed_action *actiona = eh_container_of(callback_actiona, struct arp_changed_action, action);
+    struct arp_changed_action *action = eh_container_of(callback_action, struct arp_changed_action, action);
 
-    if(!arp_entry_neigh_is_valid(actiona->action.idx)){
-        if(arp_get_table_entry(actiona->action.idx)->state !=  ARP_STATE_NUD_INCOMPLETE){
+    if(!arp_entry_neigh_is_valid(action->action.idx)){
+        if(arp_get_table_entry(action->action.idx)->state !=  ARP_STATE_NUD_INCOMPLETE){
             goto arp_query_fail;
         }
         return ARP_CALLBACK_CONTINUE;
     }
 
-    ret = ip_message_tx_ready(actiona->echo_ip_reply_msg, &arp_get_table_entry(actiona->action.idx)->hw_addr, NULL);
+    ret = ip_message_tx_ready(action->echo_ip_reply_msg, &arp_get_table_entry(action->action.idx)->hw_addr, NULL);
     if(ret < 0)
         goto ip_message_tx_ready_error;
 
-    ip_tx(actiona->echo_ip_reply_msg);
-    eh_mem_pool_free(action_pool, actiona);
+    ip_tx(action->echo_ip_reply_msg);
+    eh_mem_pool_free(action_pool, action);
     return ARP_CALLBACK_ABORT;
     
 ip_message_tx_ready_error:
 arp_query_fail:
-    ip_message_free(actiona->echo_ip_reply_msg);
-    eh_mem_pool_free(action_pool, actiona);
+    ip_message_free(action->echo_ip_reply_msg);
+    eh_mem_pool_free(action_pool, action);
     return ARP_CALLBACK_ABORT;
 }
 
@@ -72,7 +72,7 @@ arp_query_fail:
 static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr){
     int ret;
     enum route_table_type route_type;
-    struct arp_changed_action *callback_actiona;
+    struct arp_changed_action *callback_action;
     int arp_idx;
     ipv4_addr_t dst_addr_or_gw_addr;
     struct ip_message *ip_msg_reply;
@@ -83,22 +83,22 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     ehip_buffer_size_t single_data_size;
     uint8_t *write_ptr;
     ehip_netdev_t *in_netdev;
-    callback_actiona = eh_mem_pool_alloc(action_pool);
-    if(callback_actiona == NULL){
+    callback_action = eh_mem_pool_alloc(action_pool);
+    if(callback_action == NULL){
         goto eh_mem_pool_alloc_fail;
     }
 
     /* 准备回复 */
     in_netdev = ip_message_get_netdev(ip_msg);
     /* 查路由表，找到最佳路径 */
-    route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, in_netdev, &callback_actiona->out_route, NULL);
+    route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, in_netdev, &callback_action->out_route, NULL);
     if(route_type != ROUTE_TABLE_UNICAST){
         goto unreachable_target;
     }
 
-    dst_addr_or_gw_addr = callback_actiona->out_route.gateway ? 
-        callback_actiona->out_route.gateway : ip_msg->ip_hdr.src_addr;
-    arp_idx = arp_query(callback_actiona->out_route.netdev, dst_addr_or_gw_addr, -1);
+    dst_addr_or_gw_addr = callback_action->out_route.gateway ? 
+        callback_action->out_route.gateway : ip_msg->ip_hdr.src_addr;
+    arp_idx = arp_query(callback_action->out_route.netdev, dst_addr_or_gw_addr, -1);
     if(arp_idx == EH_RET_NOT_SUPPORTED){
         arp_idx = ARP_MARS_IDX;
     }else if(arp_idx < 0){
@@ -106,15 +106,15 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
         goto unreachable_target;
     }
 
-    callback_actiona->action.callback = ping_echo_reply;
-    callback_actiona->action.idx = arp_idx;
+    callback_action->action.callback = arp_callback_ping_echo_reply;
+    callback_action->action.idx = arp_idx;
 
     if(!arp_entry_neigh_is_valid(arp_idx) && arp_get_table_entry(arp_idx)->state != ARP_STATE_NUD_INCOMPLETE){
         goto unreachable_target;
     }
 
     /* 生成回复的 ip报文,header_reserved_size将设置为0，因为下面会将icmp头部当作数据的一部分来处理 */
-    ip_msg_reply = ip_message_tx_new(callback_actiona->out_route.netdev, ipv4_make_tos(0, 0), 
+    ip_msg_reply = ip_message_tx_new(callback_action->out_route.netdev, ipv4_make_tos(0, 0), 
         EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, ip_msg->ip_hdr.dst_addr, ip_msg->ip_hdr.src_addr, NULL, 0, 0);
     if(ip_msg_reply == NULL)
         goto unreachable_target;
@@ -179,12 +179,12 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     }
     ip_message_free(ip_msg);
 
-    callback_actiona->echo_ip_reply_msg = ip_msg_reply;
+    callback_action->echo_ip_reply_msg = ip_msg_reply;
 
     if(arp_entry_neigh_is_valid(arp_idx))
-        ping_echo_reply(&callback_actiona->action);
+        arp_callback_ping_echo_reply(&callback_action->action);
     else{
-        ret = arp_changed_callback_register(&callback_actiona->action);
+        ret = arp_changed_callback_register(&callback_action->action);
         if(ret < 0){
             eh_warnfl("arp_changed_callback_register fail %d", ret);
             goto make_ip_message_tx_fail;
@@ -194,7 +194,7 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
 make_ip_message_tx_fail:
     ip_message_free(ip_msg_reply);
 unreachable_target:
-    eh_mem_pool_free(action_pool, callback_actiona);
+    eh_mem_pool_free(action_pool, callback_action);
 eh_mem_pool_alloc_fail:
     ip_message_free(ip_msg);
 }

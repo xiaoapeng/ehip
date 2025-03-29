@@ -260,8 +260,14 @@ static void ip_handle(struct ehip_buffer* buf){
             return ;
         }
         case IP_PROTO_IGMP:
+            ip_message_free(ip_message);
+            break;
         case IP_PROTO_UDP:
-        case IP_PROTO_UDPLITE:
+        case IP_PROTO_UDPLITE:{
+            extern void udp_input(struct ip_message *ip_msg);
+            udp_input(ip_message);
+            return ;
+        }
         case IP_PROTO_TCP:
             ip_message_free(ip_message);
             break;
