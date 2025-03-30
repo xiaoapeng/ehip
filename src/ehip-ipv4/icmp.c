@@ -1,11 +1,10 @@
 /**
  * @file icmp.c
- * @brief 
+ * @brief 参考 rfc792
  * @author simon.xiaoapeng (simon.xiaoapeng@gmail.com)
  * @date 2024-12-31
- * 
+ *
  * @copyright Copyright (c) 2024  simon.xiaoapeng@gmail.com
- * 
  *
  */
 
