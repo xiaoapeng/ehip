@@ -34,7 +34,7 @@ struct __packed udp_hdr {
 };
 
 
-typedef void* udp_pcb_t;
+typedef int* udp_pcb_t;
 
 
 struct udp_sender {

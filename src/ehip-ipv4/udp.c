@@ -69,7 +69,7 @@ struct udp_key{
 };
 
 struct udp_value{
-    udp_pcb_t               *pcb;
+    udp_pcb_t                 pcb;
 };
 
 struct arp_changed_action{
@@ -272,7 +272,7 @@ void ehip_udp_set_recv_callback(udp_pcb_t _pcb, void (*recv_callback)(udp_pcb_t 
 int ehip_udp_sender_init_ready(udp_pcb_t _pcb, struct udp_sender *sender, 
     ipv4_addr_t dts_addr, uint16_be_t dts_port){
     struct udp_pcb *pcb = (struct udp_pcb *)_pcb;
-    sender->pcb = pcb;
+    sender->pcb = _pcb;
     sender->arp_idx_cache = -1;
     sender->dts_addr = dts_addr;
     sender->dts_port = dts_port;
