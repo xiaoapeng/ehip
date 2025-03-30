@@ -48,10 +48,8 @@ struct ip_rx_fragment{
 };
 
 struct ip_tx_fragment{
-    uint16_t                fragment_offset;
-    uint8_t                 fragment_read_offset;
-    uint8_t                 fragment_add_offset;
     ehip_buffer_t           *fragment_buffer[EHIP_IP_MAX_FRAGMENT_NUM];
+    uint8_t                 fragment_cnt;
 };
 
 struct ip_message{
@@ -169,8 +167,8 @@ extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer
  * @param  ip_fragment_msg  要遍历的 ip_message_t 结构体
  */
 #define ip_message_tx_fragment_for_each(pos_buffer, int_tmp_i, ip_fragment_msg) \
-    for( int_tmp_i = ip_fragment_msg->tx_fragment->fragment_read_offset; \
-         int_tmp_i < ip_fragment_msg->tx_fragment->fragment_add_offset && \
+    for( int_tmp_i = 0; \
+         int_tmp_i < ip_fragment_msg->tx_fragment->fragment_cnt && \
          ((pos_buffer = ip_fragment_msg->tx_fragment->fragment_buffer[int_tmp_i]) || 1U); \
          int_tmp_i++)
 
@@ -256,6 +254,13 @@ static inline int ip_message_peek(struct ip_message *msg, uint8_t **out_data, eh
  */
 extern ehip_netdev_t *ip_message_get_netdev(struct ip_message *msg);
 
+
+/**
+ * @brief                   引用一个rx ip_message_t中的数据到一个新的rx ip_message_t中，buffer内部引用计数++
+ * @param  msg              msg description
+ * @return ehip_netdev_t    失败返回NULL
+ */
+extern struct ip_message *ip_message_rx_ref_dup(struct ip_message *msg);
 
 
 #ifdef __cplusplus

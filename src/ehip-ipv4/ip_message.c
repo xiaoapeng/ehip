@@ -160,9 +160,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
         tx_fragment = eh_mem_pool_alloc(ip_tx_fragment_pool);
         if(tx_fragment == NULL)
             return EH_RET_MEM_POOL_EMPTY;
-        tx_fragment->fragment_read_offset = 0;
-        tx_fragment->fragment_add_offset = 1;
-        tx_fragment->fragment_offset = 0;
+        tx_fragment->fragment_cnt = 1;
         tx_fragment->fragment_buffer[0] = msg_hander->buffer;
         msg_hander->tx_fragment = tx_fragment;
         msg_hander->flags |= IP_MESSAGE_FLAG_FRAGMENT;
@@ -170,17 +168,17 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     /* 分片模式 */
     tx_fragment = msg_hander->tx_fragment;
     netdev = tx_fragment->fragment_buffer[0]->netdev;
-    if( tx_fragment->fragment_add_offset != 1 ){
+    if( tx_fragment->fragment_cnt != 1 ){
         /* 查看旧的buffer 是否还有空闲位置，若有则返回上一次的buffer */
         old_buffer_capacity = (ehip_buffer_size_t)((netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) - 
-            ehip_buffer_get_payload_size(tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset-1]));
+            ehip_buffer_get_payload_size(tx_fragment->fragment_buffer[tx_fragment->fragment_cnt-1]));
         if(old_buffer_capacity >= IP_FRAG_OFFSET_GRAIN){
-            *out_buffer = tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset-1];
+            *out_buffer = tx_fragment->fragment_buffer[tx_fragment->fragment_cnt-1];
             *out_buffer_capacity_size = old_buffer_capacity;
             return EH_RET_OK;
         }
     }
-    if(tx_fragment->fragment_add_offset >= EHIP_IP_MAX_FRAGMENT_NUM)
+    if(tx_fragment->fragment_cnt >= EHIP_IP_MAX_FRAGMENT_NUM)
         return EH_RET_INVALID_STATE;
     buffer = ehip_buffer_new(netdev->attr.buffer_type, 
         netdev->attr.hw_head_size + sizeof(struct ip_hdr));
@@ -189,7 +187,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     buffer->netdev = netdev;
     *out_buffer = buffer;
     *out_buffer_capacity_size = (ehip_buffer_size_t)(netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & (ehip_buffer_size_t)(~0x7);
-    tx_fragment->fragment_buffer[tx_fragment->fragment_add_offset++] = buffer;
+    tx_fragment->fragment_buffer[tx_fragment->fragment_cnt++] = buffer;
     
     return EH_RET_OK;
 }
@@ -259,7 +257,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
     }
     /* 分片模式 */
     tx_fragment = msg_hander->tx_fragment;
-    if(tx_fragment->fragment_add_offset < 2){
+    if(tx_fragment->fragment_cnt < 2){
         return EH_RET_INVALID_STATE;
     }
 
@@ -283,10 +281,10 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
         }
     }
 
-    for(int i = 0; i < tx_fragment->fragment_add_offset; i++){
+    for(int i = 0; i < tx_fragment->fragment_cnt; i++){
         buffer = tx_fragment->fragment_buffer[i];
         ipv4_hdr_frag_set(&msg_hander->ip_hdr, offset, 
-            i == tx_fragment->fragment_add_offset - 1 ? 0 : IP_FRAG_MF);
+            i == tx_fragment->fragment_cnt - 1 ? 0 : IP_FRAG_MF);
         playload_size = ehip_buffer_get_payload_size(buffer);
         if(playload_size & 0x7){
             /* 分片必须以8字节对齐 */
@@ -610,6 +608,69 @@ ehip_netdev_t *ip_message_get_netdev(struct ip_message *msg){
         return fragment_buffer ? fragment_buffer->netdev : NULL;
     }
     return msg->buffer->netdev;
+}
+
+
+struct ip_message *ip_message_rx_ref_dup(struct ip_message *msg){
+    struct ip_message * new_msg;
+
+    if(ip_message_flag_is_tx(msg))
+        return NULL;
+
+    new_msg = eh_mem_pool_alloc(ip_message_pool);
+    if(new_msg == NULL)
+        return NULL;
+    memcpy(new_msg, msg, sizeof(struct ip_message));
+    
+    /* 复制选项字节内容 */
+    if(msg->options_bytes){
+        new_msg->options_bytes = eh_mem_pool_alloc(options_bytes_pool);
+        if(new_msg->options_bytes == NULL)
+            goto options_bytes_pool_eh_mem_pool_alloc_error;
+        memcpy(new_msg->options_bytes, msg->options_bytes, IP_OPTIONS_MAX_LEN);
+    }
+
+    /* RX 模式 */
+    if(!ip_message_flag_is_fragment(msg)){
+        /* 直接引用buffer */
+        if(msg->buffer){
+            new_msg->buffer = ehip_buffer_ref_dup(msg->buffer);
+            if(eh_ptr_to_error(new_msg->buffer) < 0)
+                goto rx_ehip_buffer_ref_dup_error;
+        }
+        return new_msg;
+    }
+    /* RX 分片模式 */
+    new_msg->rx_fragment = eh_mem_pool_alloc(ip_rx_fragment_pool);
+    if(new_msg->rx_fragment == NULL)
+        goto ip_rx_fragment_pool_eh_mem_pool_alloc_error;
+    
+    memcpy(&new_msg->rx_fragment->fragment_sort[0], &msg->rx_fragment->fragment_sort[0], msg->rx_fragment->fragment_cnt);
+    new_msg->rx_fragment->fragment_buffer_size = msg->rx_fragment->fragment_buffer_size;
+    new_msg->rx_fragment->expires_cd = msg->rx_fragment->expires_cd;
+    new_msg->rx_fragment->fragment_cnt = msg->rx_fragment->fragment_cnt;
+    for(int i = 0; i < msg->rx_fragment->fragment_cnt; i++){
+        new_msg->rx_fragment->fragment_info[i].fragment_buffer = ehip_buffer_ref_dup(msg->rx_fragment->fragment_info[i].fragment_buffer);
+        if(eh_ptr_to_error(new_msg->rx_fragment->fragment_info[i].fragment_buffer) < 0){
+            for(int j = 0; j < i; j++)
+                ehip_buffer_free(new_msg->rx_fragment->fragment_info[j].fragment_buffer);
+            goto ip_rx_fragment_ehip_buffer_ref_dup_error;
+        }
+        new_msg->rx_fragment->fragment_info[i].fragment_start_offset = msg->rx_fragment->fragment_info[i].fragment_start_offset;
+        new_msg->rx_fragment->fragment_info[i].fragment_end_offset = msg->rx_fragment->fragment_info[i].fragment_end_offset;
+    }
+
+    return new_msg;
+
+ip_rx_fragment_ehip_buffer_ref_dup_error:
+    eh_mem_pool_free(ip_rx_fragment_pool, new_msg->rx_fragment);
+ip_rx_fragment_pool_eh_mem_pool_alloc_error:
+rx_ehip_buffer_ref_dup_error:
+    if(msg->options_bytes)
+        eh_mem_pool_free(options_bytes_pool, new_msg->options_bytes);
+options_bytes_pool_eh_mem_pool_alloc_error:
+    eh_mem_pool_free(ip_message_pool, new_msg);
+    return NULL;
 }
 
 
