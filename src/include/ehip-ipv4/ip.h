@@ -132,6 +132,11 @@ struct __packed ip_hdr {
 #define ipv4_addr_to_dec3(addr) ( ((addr) & 0x000000ff) >> 0  )
 #endif
 
+#define IPV4_FORMATIO "%d.%d.%d.%d"
+#define ipv4_formatio(addr) \
+    ipv4_addr_to_dec0(addr),ipv4_addr_to_dec1(addr),ipv4_addr_to_dec2(addr),ipv4_addr_to_dec3(addr)
+
+
 
 #define ipv4_netdev_flags_is_arp_support(netdev) ((netdev)->attr_flags & IPV4_ATTR_FLAG_ARP_SUPPORT)
 #define ipv4_netdev_flags_is_forward_support(netdev) ((netdev)->attr_flags & IPV4_ATTR_FLAG_FORWARD_SUPPORT)

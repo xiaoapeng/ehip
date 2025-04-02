@@ -103,9 +103,16 @@ extern void*     ehip_udp_get_userdata(udp_pcb_t pcb);
  * @param  pcb              ehip_udp_new or ehip_udp_any_new 接口返回的udp上下文句柄
  * @param  recv_callback    接收回调函数
  */
-extern void      ehip_udp_set_recv_callback(udp_pcb_t pcb, void (*recv_callback)(udp_pcb_t pcb, ipv4_addr_t addr, 
-        uint16_be_t port, struct ip_message *udp_rx_meg));
+extern void      ehip_udp_set_recv_callback(udp_pcb_t pcb, 
+    void (*recv_callback)(udp_pcb_t pcb, ipv4_addr_t addr, uint16_be_t port, struct ip_message *udp_rx_meg));
 
+/**
+ * @brief                   设置udp上下文句柄的错误回调函数
+ * @param  pcb              ehip_udp_new or ehip_udp_any_new 接口返回的udp上下文句柄
+ * @param  error_callback   错误回调函数
+ */
+extern void ehip_udp_set_error_callback(udp_pcb_t pcb, 
+    void (*error_callback)(udp_pcb_t pcb, ipv4_addr_t addr, uint16_be_t port, int err));
 
 /**
  * @brief                   初始化udp报文发送器,在初始化成功后可反复使用，
@@ -120,6 +127,12 @@ extern void      ehip_udp_set_recv_callback(udp_pcb_t pcb, void (*recv_callback)
 extern int       ehip_udp_sender_init_ready(udp_pcb_t pcb, struct udp_sender *sender, 
         ipv4_addr_t dts_addr, uint16_be_t dts_port);
 
+/**
+ * @brief                   判断udp报文发送器是否初始化
+ * @param  sender           udp报文发送器
+ * @return bool
+ */
+#define          ehip_udp_sender_is_init(sender)  ((sender)->netdev != NULL)
 /**
  * @brief                   清理udp报文发送器
  * @param  sender           udp报文发送器
