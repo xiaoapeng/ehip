@@ -18,7 +18,7 @@ extern "C"{
 #endif /* __cplusplus */
 
 enum ehip_buffer_type{
-    EHIP_BUFFER_TYPE_ETHERNET_FRAME,
+    EHIP_BUFFER_TYPE_GENERAL_FRAME,
     EHIP_BUFFER_TYPE_MAX
 };
 

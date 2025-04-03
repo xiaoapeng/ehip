@@ -31,7 +31,7 @@ struct ehip_pool_info {
     ehip_buffer_size_t    align;
 };
 static const struct ehip_pool_info ehip_pool_info_tab[EHIP_BUFFER_TYPE_MAX] = {
-    [EHIP_BUFFER_TYPE_ETHERNET_FRAME] = {EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_SIZE, EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_NUM, EHIP_NETDEV_TYPE_ETHERNET_POOL_BUFFER_ALIGN}
+    [EHIP_BUFFER_TYPE_GENERAL_FRAME] = {EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_SIZE, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_NUM, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_ALIGN}
 };
 
 static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0, ehip_buffer_raw_ptr buffer_raw_ptr){

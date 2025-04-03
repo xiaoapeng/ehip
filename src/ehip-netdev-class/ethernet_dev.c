@@ -118,7 +118,7 @@ static void ethernet_dev_trait_reset(ehip_netdev_t *netdev){
     netdev->attr.hw_tail_size = 4;   /* crc */
     netdev->attr.mtu = (uint16_t)(netdev->param->net_max_frame_size - 
         netdev->attr.hw_head_size - netdev->attr.hw_tail_size);
-    netdev->attr.buffer_type = EHIP_BUFFER_TYPE_ETHERNET_FRAME;
+    netdev->attr.buffer_type = EHIP_BUFFER_TYPE_GENERAL_FRAME;
     netdev_ethernet_trait->mac_ptype = EHIP_PTYPE_ETHERNET_II_FRAME;
     memcpy(&netdev_ethernet_trait->broadcast_hw_addr, EHIP_ETH_MAC_ADDR_BROADCAST, EHIP_ETH_HWADDR_LEN);
     _ipv4_netdev_reset(&netdev_ethernet_trait->ipv4_netdev, netdev);
