@@ -27,6 +27,8 @@ return_type_ptr ehip_netdev_trait_##name(ehip_netdev_t *netdev)                 
     const struct ehip_netdev_trait_ops * ops = type_tab[netdev->type];                                                  \
     if((uint32_t)netdev->type >= EH_ARRAY_SIZE(type_tab))                                                               \
         return NULL;                                                                                                    \
+    if(ops->name##_offset == EHIP_NETDEV_TRAIT_UNKNOWN_OFFSET)                                                          \
+        return NULL;                                                                                                    \
     return (return_type_ptr)ehip_netdev_offset_to_trait_addr(netdev, ops->name##_offset);                               \
 }
 
@@ -35,6 +37,8 @@ return_type_ptr ehip_netdev_trait_##name(ehip_netdev_t *netdev, int index)      
 {                                                                                                                       \
     const struct ehip_netdev_trait_ops * ops = type_tab[netdev->type];                                                  \
     if((uint32_t)netdev->type >= EH_ARRAY_SIZE(type_tab) || (unsigned long)step_len <= 0)                               \
+        return NULL;                                                                                                    \
+    if(ops->name##_offset == EHIP_NETDEV_TRAIT_UNKNOWN_OFFSET)                                                          \
         return NULL;                                                                                                    \
     return (return_type_ptr)                                                                                            \
         (((char*)ehip_netdev_offset_to_trait_addr(netdev, ops->name##_offset)) +                                        \

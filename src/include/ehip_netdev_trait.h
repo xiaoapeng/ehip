@@ -51,6 +51,7 @@ struct ehip_netdev_trait_ops{
     uint16_t broadcast_hw_offset;
 };
 
+#define EHIP_NETDEV_TRAIT_UNKNOWN_OFFSET ((uint16_t)(UINT16_MAX))
 #define EHIP_NETDEV_TRAIT_MAX_SIZE  ((size_t)(UINT16_MAX - sizeof(ehip_netdev_t)))
 
 #define ehip_netdev_trait_static_assert(type)   \
