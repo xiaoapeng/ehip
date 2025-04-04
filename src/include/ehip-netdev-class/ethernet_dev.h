@@ -32,13 +32,6 @@ extern "C"{
 #define EHIP_NETDEV_ETHERNET_STATUS_BROADCAST              0x00000010    /* 接收广播包 */
 #define EHIP_NETDEV_ETHERNET_STATUS_MULTICAST              0x00000020    /* 接收指定组播包 */
 
-/**
- * @brief 定义ndo_ctrl函数的命令参数
- */
-#define ETHERNET_CTRL_CMD_SET_RX_FILTER_MODE                0x00000001
-#define ETHERNET_CTRL_CMD_SET_MAC_ADDR                      0x00000002
-#define ETHERNET_CTRL_CMD_SET_MULTICAST_ADDR                0x00000003
-
 struct ethernet_trait{
     ehip_eth_addr_t                             hw_addr;
     enum ehip_ptype                             mac_ptype;
@@ -47,6 +40,7 @@ struct ethernet_trait{
     struct ipv4_netdev                          ipv4_netdev;
 };
 
+ehip_netdev_trait_static_assert(struct ethernet_trait);
 
 #ifdef __cplusplus
 #if __cplusplus

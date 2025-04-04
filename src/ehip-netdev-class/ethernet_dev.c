@@ -22,7 +22,6 @@
 #include <ehip-netdev-class/ethernet_dev.h>
 
 
-ehip_netdev_trait_static_assert(struct ethernet_trait);
 
 static int  ethernet_dev_trait_up(ehip_netdev_t *netdev);
 static void ethernet_dev_trait_down(ehip_netdev_t *netdev);
