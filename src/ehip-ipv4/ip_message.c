@@ -135,6 +135,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
                 (uint16_t)msg_hander->tx_header_size);
             if(eh_ptr_to_error(buffer) < 0)
                 return eh_ptr_to_error(buffer);
+            buffer->protocol = EHIP_PTYPE_ETHERNET_IP;
             msg_hander->buffer = buffer;
             msg_hander->flags |= IP_MESSAGE_FLAG_TX_BUFFER_INIT;
             msg_hander->buffer->netdev = netdev;
@@ -185,6 +186,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     if(eh_ptr_to_error(buffer))
         return eh_ptr_to_error(buffer);
     buffer->netdev = netdev;
+    buffer->protocol = EHIP_PTYPE_ETHERNET_IP;
     *out_buffer = buffer;
     *out_buffer_capacity_size = (ehip_buffer_size_t)(netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & (ehip_buffer_size_t)(~0x7);
     tx_fragment->fragment_buffer[tx_fragment->fragment_cnt++] = buffer;

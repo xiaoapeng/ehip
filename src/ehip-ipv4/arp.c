@@ -177,6 +177,7 @@ static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *
     if(eh_ptr_to_error(newbuf) < 0)
         return eh_ptr_to_error(newbuf);
     newbuf->netdev = netdev;
+    newbuf->protocol = ptype;
     arp_hdr = (struct arp_hdr*)ehip_buffer_payload_append(newbuf, (ehip_buffer_size_t)arp_hdr_len(netdev));
     if(arp_hdr == NULL){
         ret = EH_RET_INVALID_STATE;
