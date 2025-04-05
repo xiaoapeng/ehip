@@ -45,9 +45,9 @@ static void _ehip_ipv4_route_delete(struct route_table_entry *entry){
 static void netdev_status_change(eh_event_t *e, void *slot_param){
     (void)e;
     struct route_table_entry *entry = slot_param;
-    if(eh_event_flags_get(eh_signal_to_custom_event(&entry->route.netdev->signal_status)) & EHIP_NETDEV_STATUS_UP)
+    if(ehip_netdev_flags_get(entry->route.netdev) & EHIP_NETDEV_STATUS_UP)
         return ;
-    
+
     /* 删除此条路由 */
     _ehip_ipv4_route_delete(entry);
 }

@@ -130,6 +130,13 @@ extern int ehip_netdev_up(ehip_netdev_t *netdev);
  */
 extern void ehip_netdev_down(ehip_netdev_t *netdev);
 
+/**
+ * @brief                   获取网卡状态
+ * @param  netdev           网卡句柄
+ * @return uint32_t 
+ */
+#define ehip_netdev_flags_get(netdev)   eh_event_flags_get(eh_signal_to_custom_event(&(netdev)->signal_status))
+
 
 #ifdef __cplusplus
 #if __cplusplus
