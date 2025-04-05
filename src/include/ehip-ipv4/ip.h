@@ -50,6 +50,7 @@ typedef uint32_be_t ipv4_addr_t;
 
 #define IPV4_ATTR_FLAG_ARP_SUPPORT    (1 << 0)
 #define IPV4_ATTR_FLAG_FORWARD_SUPPORT  (1 << 1)
+#define IPV4_ATTR_FLAG_LOOPBACK_SUPPORT (1 << 2)
 
 
 struct ipv4_netdev{
@@ -140,6 +141,7 @@ struct __packed ip_hdr {
 
 #define ipv4_netdev_flags_is_arp_support(netdev) ((netdev)->attr_flags & IPV4_ATTR_FLAG_ARP_SUPPORT)
 #define ipv4_netdev_flags_is_forward_support(netdev) ((netdev)->attr_flags & IPV4_ATTR_FLAG_FORWARD_SUPPORT)
+#define ipv4_netdev_flags_is_loopback_support(netdev) ((netdev)->attr_flags & IPV4_ATTR_FLAG_LOOPBACK_SUPPORT)
 
 #define ipv4_netdev_flags_set(netdev, flags) ((netdev)->attr_flags |= (flags))
 #define ipv4_netdev_flags_clear(netdev, flags) ((netdev)->attr_flags &= ~(flags))
