@@ -177,7 +177,6 @@ static int arp_send_dst(uint16_be_t type, enum ehip_ptype ptype, ehip_netdev_t *
     if(eh_ptr_to_error(newbuf) < 0)
         return eh_ptr_to_error(newbuf);
     newbuf->netdev = netdev;
-    newbuf->protocol = ptype;
     arp_hdr = (struct arp_hdr*)ehip_buffer_payload_append(newbuf, (ehip_buffer_size_t)arp_hdr_len(netdev));
     if(arp_hdr == NULL){
         ret = EH_RET_INVALID_STATE;
@@ -415,23 +414,15 @@ static void arp_handle(struct ehip_buffer* buf){
     arp_pos += arp_hdr->ar_hln;
     memcpy(&d_ipv4_addr, arp_pos, sizeof(ipv4_addr_t));
 
-#if EHIP_ARP_DEBUG
-    eh_debugfl("ar_hrd: %04hx", arp_hdr->ar_hrd);
-    eh_debugfl("ar_pro: %04hx", arp_hdr->ar_pro);
-    eh_debugfl("ar_hln: %02hhx", arp_hdr->ar_hln);
-    eh_debugfl("ar_pln: %02hhx", arp_hdr->ar_pln);
-    eh_debugfl("ar_op: %04hx", arp_hdr->ar_op);
-    eh_debugfl("s_hw: %.*hhq", arp_hdr->ar_hln, s_hw_addr);
-    eh_debugfl("s_ip: %d.%d.%d.%d", 
-        ipv4_addr_to_dec0(s_ipv4_addr), ipv4_addr_to_dec1(s_ipv4_addr),
-        ipv4_addr_to_dec2(s_ipv4_addr), ipv4_addr_to_dec3(s_ipv4_addr));
-    eh_debugfl("d_hw: %.*hhq", arp_hdr->ar_hln, d_hw_addr);
-    eh_debugfl("d_ip: %d.%d.%d.%d", 
-        ipv4_addr_to_dec0(d_ipv4_addr), ipv4_addr_to_dec1(d_ipv4_addr),
-        ipv4_addr_to_dec2(d_ipv4_addr), ipv4_addr_to_dec3(d_ipv4_addr));
-#else
-    (void)d_hw_addr;
-#endif
+    eh_modeule_debugln( ARP, "ar_hrd: %04hx", arp_hdr->ar_hrd);
+    eh_modeule_debugln( ARP, "ar_pro: %04hx", arp_hdr->ar_pro);
+    eh_modeule_debugln( ARP, "ar_hln: %02hhx", arp_hdr->ar_hln);
+    eh_modeule_debugln( ARP, "ar_pln: %02hhx", arp_hdr->ar_pln);
+    eh_modeule_debugln( ARP, "ar_op: %04hx", arp_hdr->ar_op);
+    eh_modeule_debugln( ARP, "s_hw: %.*hhq", arp_hdr->ar_hln, s_hw_addr);
+    eh_modeule_debugln( ARP, "s_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
+    eh_modeule_debugln( ARP, "d_hw: %.*hhq", arp_hdr->ar_hln, d_hw_addr);
+    eh_modeule_debugln( ARP, "d_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
 
 	if(eh_unlikely(ipv4_is_multicast(d_ipv4_addr)))
         goto drop;
@@ -538,13 +529,13 @@ valid:
 
 void arp_table_dump(void){
     const struct arp_entry* atp_entry;
-    eh_infoln("############## arp table: ###############");
+    eh_modeule_infoln( ARP, "############## arp table: ###############");
     for(int i = 0; i < (int)EHIP_ARP_CACHE_MAX_NUM; i++){
         atp_entry = _arp_table+i;
         if(atp_entry->state == ARP_STATE_NUD_FAILED) 
             continue;
         
-        eh_infofl("ip: %03d.%03d.%03d.%03d mac: %.6hhq if: %s state: %-12s RC/DPT: %6d RT/ST: %6d", 
+        eh_modeule_infoln( ARP_DUMP, "ip: %03d.%03d.%03d.%03d mac: %.6hhq if: %s state: %-12s RC/DPT: %6d RT/ST: %6d", 
             ipv4_addr_to_dec0(atp_entry->ip_addr), ipv4_addr_to_dec1(atp_entry->ip_addr),
             ipv4_addr_to_dec2(atp_entry->ip_addr), ipv4_addr_to_dec3(atp_entry->ip_addr),
             &atp_entry->hw_addr, atp_entry->netdev->param->name, 

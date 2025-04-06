@@ -22,13 +22,6 @@
 #include <ehip-ipv4/ip_message.h>
 #include <ehip-ipv4/ip.h>
 
-
-#if EHIP_IP_DEBUG
-#define ip_debugfl(...) eh_debugfl(__VA_ARGS__)
-#else
-#define ip_debugfl(...)
-#endif
-
 struct ip_message *ip_fragment_reasse_tab[EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM];
 
 static int ip_fragment_find(const struct ip_hdr *ip_hdr){
@@ -76,9 +69,9 @@ static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr 
         ehip_buffer_free(buffer);
         return NULL;
     }
-    ip_debugfl("ip fragment index:%d", index);
-    ip_debugfl("id:%d", eh_hton16(ip_hdr->id));
-    ip_debugfl("src:%d.%d.%d.%d -> %d.%d.%d.%d", 
+    eh_modeule_debugln( IP_REASSE, "ip fragment index:%d", index);
+    eh_modeule_debugln( IP_REASSE, "id:%d", eh_hton16(ip_hdr->id));
+    eh_modeule_debugln( IP_REASSE, "src:%d.%d.%d.%d -> %d.%d.%d.%d", 
         ipv4_addr_to_dec0(ip_hdr->src_addr), 
         ipv4_addr_to_dec1(ip_hdr->src_addr), 
         ipv4_addr_to_dec2(ip_hdr->src_addr), 
@@ -88,18 +81,18 @@ static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr 
         ipv4_addr_to_dec2(ip_hdr->dst_addr), 
         ipv4_addr_to_dec3(ip_hdr->dst_addr)
     );
-    ip_debugfl("start offset:%d",ipv4_hdr_offset(ip_hdr));
-    ip_debugfl("end offset:%d",ipv4_hdr_offset(ip_hdr) + ipv4_hdr_body_len(ip_hdr));
-    ip_debugfl("fragment size:%d", ipv4_hdr_body_len(ip_hdr));
+    eh_modeule_debugln( IP_REASSE, "start offset:%d",ipv4_hdr_offset(ip_hdr));
+    eh_modeule_debugln( IP_REASSE, "end offset:%d",ipv4_hdr_offset(ip_hdr) + ipv4_hdr_body_len(ip_hdr));
+    eh_modeule_debugln( IP_REASSE, "fragment size:%d", ipv4_hdr_body_len(ip_hdr));
 
     if(ip_fragment_reasse_tab[index] == NULL){
         /* 收到的第一个分片 */
-        ip_debugfl("first fragment!");
+        eh_modeule_debugln( IP_REASSE, "first fragment!");
         ip_fragment_reasse_tab[index] = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr);
         return NULL;
     }
 
-    ip_debugfl("add fragment %d", ip_fragment_reasse_tab[index]->rx_fragment->fragment_cnt);
+    eh_modeule_debugln( IP_REASSE, "add fragment %d", ip_fragment_reasse_tab[index]->rx_fragment->fragment_cnt);
     
     /* 
      * add 对ip_msg不会做任何更改，而是在ehip_buffer 内部引用计数+1 
@@ -133,7 +126,7 @@ static void slot_function_ip_reasse_1s_timer_handler(eh_event_t *e, void *slot_p
 
         if(ip_fragment_reasse_tab[i]->rx_fragment->expires_cd == 0){
             /* ip分片等待时间超时，释放分片记录 */
-            ip_debugfl("IP fragment timeout, freeing fragment record. [id:%d] [src:%d.%d.%d.%d -> %d.%d.%d.%d]", 
+            eh_modeule_debugln( IP_REASSE, "IP fragment timeout, freeing fragment record. [id:%d] [src:%d.%d.%d.%d -> %d.%d.%d.%d]", 
                 eh_hton16(ip_fragment_reasse_tab[i]->ip_hdr.id),
                 ipv4_addr_to_dec0(ip_fragment_reasse_tab[i]->ip_hdr.src_addr), 
                 ipv4_addr_to_dec1(ip_fragment_reasse_tab[i]->ip_hdr.src_addr), 
@@ -176,12 +169,13 @@ static void ip_handle(struct ehip_buffer* buf){
         buffer_all_len < ip_msg_len
     )
         goto drop;
-        
-    if(eh_unlikely(ehip_inet_chksum(ip_hdr, ipv4_hdr_len(ip_hdr)) != 0))
-        goto drop;
-
-    /* 修剪尾部多余长度  totlen-iphdr_len */
     
+    /* 如果是本地回环的包，就无需做检验和 */
+    if( buf->packet_type != EHIP_PACKET_TYPE_LOOPBACK && 
+        eh_unlikely(ehip_inet_chksum(ip_hdr, ipv4_hdr_len(ip_hdr)) != 0)){
+        goto drop;
+    }
+    /* 修剪尾部多余长度  totlen-iphdr_len */
     trim_len = buffer_all_len - ip_msg_len;
     if(trim_len && ehip_buffer_payload_reduce(buf, trim_len) == NULL)
         goto drop;
@@ -189,19 +183,19 @@ static void ip_handle(struct ehip_buffer* buf){
     src_addr = ip_hdr->src_addr;
     dst_addr = ip_hdr->dst_addr;
 
-    ip_debugfl("############### RAW IP PACKET ###############");
-    ip_debugfl("src: %d.%d.%d.%d", 
+    eh_modeule_debugln( IP_INPUT, "############### RAW IP PACKET ###############");
+    eh_modeule_debugln( IP_INPUT, "src: %d.%d.%d.%d", 
         ipv4_addr_to_dec0(src_addr), ipv4_addr_to_dec1(src_addr),
         ipv4_addr_to_dec2(src_addr), ipv4_addr_to_dec3(src_addr));
-    ip_debugfl("dst: %d.%d.%d.%d", 
+    eh_modeule_debugln( IP_INPUT, "dst: %d.%d.%d.%d", 
         ipv4_addr_to_dec0(dst_addr), ipv4_addr_to_dec1(dst_addr),
         ipv4_addr_to_dec2(dst_addr), ipv4_addr_to_dec3(dst_addr));
-    ip_debugfl("tos:%02x", ip_hdr->tos);
-    ip_debugfl("iphdr_len:%d", ip_msg_len);
-    ip_debugfl("id:%d", eh_ntoh16(ip_hdr->id));
-    ip_debugfl("frag_off:%04x", eh_ntoh16(ip_hdr->frag_off));
-    ip_debugfl("ttl:%d", ip_hdr->ttl);
-    ip_debugfl("protocol:%02x", ip_hdr->protocol);
+    eh_modeule_debugln( IP_INPUT, "tos:%02x", ip_hdr->tos);
+    eh_modeule_debugln( IP_INPUT, "iphdr_len:%d", ip_msg_len);
+    eh_modeule_debugln( IP_INPUT, "id:%d", eh_ntoh16(ip_hdr->id));
+    eh_modeule_debugln( IP_INPUT, "frag_off:%04x", eh_ntoh16(ip_hdr->frag_off));
+    eh_modeule_debugln( IP_INPUT, "ttl:%d", ip_hdr->ttl);
+    eh_modeule_debugln( IP_INPUT, "protocol:%02x", ip_hdr->protocol);
 
     /*
      *  判断本包的目的地址类型
@@ -233,18 +227,14 @@ static void ip_handle(struct ehip_buffer* buf){
     if(ipv4_hdr_is_fragment(ip_hdr)){
         int i,sort_i;
         ehip_buffer_t *pos_buffer;
-        ip_debugfl("ip fragment !");
+        eh_modeule_debugln( IP_INPUT, "ip fragment !");
         /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
         ip_message = ip_reasse(buf, ip_hdr);
         if(ip_message == NULL)
             return ;
-        ip_debugfl("ip reassemble success!");
+        eh_modeule_debugln( IP_INPUT, "ip reassemble success!");
         ip_message_rx_fragment_for_each(pos_buffer, i, sort_i, ip_message){
-            // ip_debugfl("fragment %d %d : |%.*hhq|", i ,
-            //     ehip_buffer_get_payload_size(pos_buffer),
-            //     ehip_buffer_get_payload_size(pos_buffer),
-            //     ehip_buffer_get_payload_ptr(pos_buffer));
-            ip_debugfl("fragment %d %d", i , ehip_buffer_get_payload_size(pos_buffer));
+            eh_modeule_debugln( IP_INPUT, "fragment %d %d", i , ehip_buffer_get_payload_size(pos_buffer));
         }
     }else{
         /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
