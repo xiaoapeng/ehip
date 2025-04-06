@@ -50,6 +50,8 @@ struct ehip_buffer{
     struct ehip_buffer_ref     *buffer_ref;
     ehip_buffer_size_t          payload_pos;
     ehip_buffer_size_t          payload_tail;
+
+    /* 该字段在tx时不进行使用，一般在rx时在每一层被赋值使用 */
     enum ehip_ptype             protocol;
     ehip_netdev_t              *netdev;
     union{

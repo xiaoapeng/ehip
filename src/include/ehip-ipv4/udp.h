@@ -39,17 +39,26 @@ typedef int* udp_pcb_t;
 
 struct udp_sender {
     struct ip_message   *ip_msg;
+    eh_clock_t          last_check_time;
+    udp_pcb_t           pcb;
+
     enum route_table_type route_type;
     ehip_netdev_t       *netdev;
-    ipv4_addr_t         gw_addr;
+
     ipv4_addr_t         src_addr;
     ipv4_addr_t         dts_addr;
     uint16_be_t         dts_port;
     uint16_be_t         src_port;
-    int                 arp_idx_cache;
-    eh_clock_t          last_check_time;
-    udp_pcb_t           pcb;
-    
+
+    union {
+        struct{
+            ipv4_addr_t         gw_addr;
+            int                 arp_idx_cache;
+        };
+        /* 环回模式下以网卡指针值作为物理地址，方便环回rx处理时处理数据包 */
+        ehip_netdev_t           *loopback_virtual_hw_addr;
+    };
+
 };
 
 /* DHCP 客户端所绑定地址 */

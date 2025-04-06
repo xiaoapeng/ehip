@@ -26,6 +26,7 @@
 #include <ehip-ipv4/ip.h>
 #include <ehip-ipv4/ip_message.h>
 #include <ehip-mac/hw_addr.h>
+#include <ehip-mac/loopback.h>
 
 eh_static_assert(EHIP_IP_MAX_FRAGMENT_NUM <= 0xFF, "IP fragment number must be less than 0xFF.");
 
@@ -135,7 +136,6 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
                 (uint16_t)msg_hander->tx_header_size);
             if(eh_ptr_to_error(buffer) < 0)
                 return eh_ptr_to_error(buffer);
-            buffer->protocol = EHIP_PTYPE_ETHERNET_IP;
             msg_hander->buffer = buffer;
             msg_hander->flags |= IP_MESSAGE_FLAG_TX_BUFFER_INIT;
             msg_hander->buffer->netdev = netdev;
@@ -186,7 +186,6 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
     if(eh_ptr_to_error(buffer))
         return eh_ptr_to_error(buffer);
     buffer->netdev = netdev;
-    buffer->protocol = EHIP_PTYPE_ETHERNET_IP;
     *out_buffer = buffer;
     *out_buffer_capacity_size = (ehip_buffer_size_t)(netdev->attr.mtu - ipv4_hdr_len(&msg_hander->ip_hdr)) & (ehip_buffer_size_t)(~0x7);
     tx_fragment->fragment_buffer[tx_fragment->fragment_cnt++] = buffer;
@@ -244,7 +243,8 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
         options_len = ipv4_hdr_len(&msg_hander->ip_hdr) - (ehip_buffer_size_t)sizeof(struct ip_hdr);
         if(options_len && msg_hander->options_bytes)
             memcpy(ip_hdr_buffer->options, msg_hander->options_bytes, options_len);
-        ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
+        if(!loopback_is_loopback_netdev(buffer->netdev))
+            ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
 
         ret = ehip_netdev_trait_hard_header( netdev, buffer, 
             ehip_netdev_trait_hw_addr(netdev), dst_hw_addr, 
@@ -308,7 +308,8 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
 
             msg_hander->ip_hdr.ihl = sizeof(struct ip_hdr) >> 2;
         }
-        ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(ip_hdr_buffer));
+        if(!loopback_is_loopback_netdev(buffer->netdev))
+            ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(ip_hdr_buffer));
 
         ret = ehip_netdev_trait_hard_header( netdev, buffer, 
             ehip_netdev_trait_hw_addr(netdev), dst_hw_addr,

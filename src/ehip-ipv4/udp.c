@@ -34,6 +34,7 @@
 #include <ehip-ipv4/route.h>
 #include <ehip-ipv4/ip_tx.h>
 #include <ehip-ipv4/_pseudo_header.h>
+#include <ehip-mac/loopback.h>
 
 
 #define UDP_SENDER_REFRESH_TIMEOUT   3000ULL
@@ -166,9 +167,20 @@ static int udp_sender_force_refresh(struct udp_sender *sender){
         sender->src_addr = restrict_pcb->src_ip;
     }
 
-    sender->netdev = route.netdev;
+    if(route_type == ROUTE_TABLE_LOCAL || route_type == ROUTE_TABLE_LOCAL_SELF){
+        if( !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(route.netdev)) )
+            return EHIP_RET_UNREACHABLE;
+        sender->netdev = loopback_default_netdev();
+        sender->loopback_virtual_hw_addr = route.netdev;
+    }else{
+        sender->netdev = route.netdev;
+        sender->gw_addr = route.gateway;
+    }
+
+    if(!(ehip_netdev_flags_get(sender->netdev) & EHIP_NETDEV_STATUS_UP))
+        return EHIP_RET_UNREACHABLE;
+
     sender->route_type = route_type;
-    sender->gw_addr = route.gateway;
     return 0;
 }
 
@@ -215,8 +227,14 @@ void udp_input(struct ip_message *ip_msg){
     if(ret != sizeof(struct udp_hdr)){
         goto drop;
     }
-
-
+    eh_modeule_debugfl(UDP_INPUT, "############### INPUT RAW UDP PACKET ###############");
+    eh_modeule_debugfl(UDP_INPUT, IPV4_FORMATIO":%d->"IPV4_FORMATIO":%d len:%d",ipv4_formatio(ip_msg->ip_hdr.src_addr), eh_ntoh16(udp_hdr->source),
+        ipv4_formatio(ip_msg->ip_hdr.dst_addr), eh_ntoh16(udp_hdr->dest), eh_ntoh16(udp_hdr->len));
+    eh_modeule_debugfl(UDP_INPUT, "check: %#hx", udp_hdr->check);
+    if(!ip_message_flag_is_fragment(ip_msg)){
+        eh_modeule_debugfl(UDP_INPUT,"payload %.*hhq", ehip_buffer_get_payload_size(ip_msg->buffer), 
+            (uint8_t *)ehip_buffer_get_payload_ptr(ip_msg->buffer));
+    }
 drop:
     ip_message_free(ip_msg);
     return ;
@@ -426,6 +444,11 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
 
     }else if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF){
         /* TODO */
+        ret = ip_message_tx_ready(ip_msg, (const ehip_hw_addr_t*)&sender->loopback_virtual_hw_addr, (const uint8_t *)&udp_hdr);
+        if(ret < 0)
+            goto exit;
+        ip_tx(sender->ip_msg);
+        sender->ip_msg = NULL;
         goto exit;
     }
 

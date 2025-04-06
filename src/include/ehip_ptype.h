@@ -24,7 +24,8 @@ enum ehip_ptype{
     /* Non DIX types,MAX = 0x0600 */
     EHIP_PTYPE_UNKNOWN = eh_hton16(0x0000),
     EHIP_PTYPE_ETHERNET_II_FRAME = eh_hton16(0x0001),
-
+    EHIP_PTYPE_LOOPBACK = eh_hton16(0x0002),
+    
     /* These are the defined Ethernet Protocol ID's. */
     EHIP_PTYPE_ETHERNET_IP = eh_hton16(EHIP_ETH_P_IP),
     EHIP_PTYPE_ETHERNET_ARP = eh_hton16(EHIP_ETH_P_ARP),
