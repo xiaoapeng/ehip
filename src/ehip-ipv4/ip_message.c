@@ -518,6 +518,37 @@ int  ip_message_rx_data_size(struct ip_message *msg_hander){
     }
 }
 
+
+int ip_message_rx_data_tail_trim(struct ip_message *msg_hander, ehip_buffer_size_t size){
+    eh_param_assert(msg_hander);
+    eh_param_assert(ip_message_flag_is_rx(msg_hander));
+    if(ip_message_flag_is_fragment(msg_hander)){
+        ehip_buffer_t *buffer;
+        int i, sort_i;
+        ehip_buffer_size_t fragment_size;
+        ehip_buffer_size_t trim_offset_start;
+        ehip_buffer_size_t trim_size;
+        if(msg_hander->rx_fragment->fragment_buffer_size < size)
+            return -1;
+        trim_offset_start = msg_hander->rx_fragment->fragment_buffer_size - size;
+        ip_message_rx_fragment_for_each(buffer, i, sort_i, msg_hander){
+            fragment_size = ehip_buffer_get_payload_size(buffer);
+            if(trim_offset_start >= fragment_size){
+                trim_offset_start -= fragment_size;
+                continue;
+            }
+            /* 开始修剪 */
+            trim_size = fragment_size - trim_offset_start;
+            ehip_buffer_payload_reduce(buffer, fragment_size);
+            msg_hander->rx_fragment->fragment_buffer_size -= trim_size;
+            trim_offset_start = 0;
+        }
+        return 0;
+    }else{
+        return ehip_buffer_payload_reduce(msg_hander->buffer, (ehip_buffer_size_t)size) ? 0 : -1;
+    }
+}
+
 int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
     ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type, bool is_copy){
 

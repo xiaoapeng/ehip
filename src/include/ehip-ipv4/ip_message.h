@@ -233,6 +233,15 @@ static inline int ip_message_rx_read_skip(struct ip_message *msg, ehip_buffer_si
  */
 extern int  ip_message_rx_data_size(struct ip_message *msg);
 
+
+/**
+ * @brief                   减少一个ip_message_t尾部的数据大小，在传递给用户时有用（修剪一些尾部的多余数据）
+ * @param  msg              My Param doc
+ * @param  size             My Param doc
+ * @return int 
+ */
+extern int ip_message_rx_data_tail_trim(struct ip_message *msg, ehip_buffer_size_t size);
+
 /**
  * @brief                   偷看一个ip_message_t中的数据,不偏移读指针
  * @param  msg              msg description
