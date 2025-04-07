@@ -20,8 +20,8 @@ extern "C"{
 
 // 用户态伪头部示例（IPv4 TCP）
 struct pseudo_header {
-    ipv4_addr_t         src_ip;
-    ipv4_addr_t         dst_ip;
+    ipv4_addr_t         src_addr;
+    ipv4_addr_t         dst_addr;
     uint8_t             zero;
     uint8_t             proto;
     uint16_be_t         len;

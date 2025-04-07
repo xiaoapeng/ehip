@@ -222,18 +222,120 @@ void udp_input(struct ip_message *ip_msg){
     int ret;
     struct udp_hdr *udp_hdr;
     struct udp_hdr udp_hdr_tmp;
+    struct pseudo_header pseudo_header;
+    uint16_t udp_checksum = 0;
+    uint16_t udp_data_len;
+    ehip_buffer_size_t trim_len;
+    struct udp_key key;
+    struct eh_hashtbl_node *node_pos, *node_tmp_n;
+    struct udp_value *value;
+    struct eh_list_head *node_head;
+    struct udp_pcb *base_pcb;
+    struct udp_pcb_restrict *restrict_pcb;
+    struct ip_message *ip_msg_tmp;
+    
 
     ret = ip_message_rx_read(ip_msg, (uint8_t**)&udp_hdr, sizeof(struct udp_hdr), (uint8_t*)&udp_hdr_tmp);
     if(ret != sizeof(struct udp_hdr)){
+        eh_msysfl(UDP_INPUT, "udp_hdr read error %d", ret);
         goto drop;
     }
-    eh_modeule_debugfl(UDP_INPUT, "############### INPUT RAW UDP PACKET ###############");
-    eh_modeule_debugfl(UDP_INPUT, IPV4_FORMATIO":%d->"IPV4_FORMATIO":%d len:%d",ipv4_formatio(ip_msg->ip_hdr.src_addr), eh_ntoh16(udp_hdr->source),
-        ipv4_formatio(ip_msg->ip_hdr.dst_addr), eh_ntoh16(udp_hdr->dest), eh_ntoh16(udp_hdr->len));
-    eh_modeule_debugfl(UDP_INPUT, "check: %#hx", udp_hdr->check);
+
+    udp_data_len = eh_ntoh16(udp_hdr->len) - (uint16_t)sizeof(struct udp_hdr);
+    eh_mdebugfl(UDP_INPUT, "############### INPUT RAW UDP PACKET ###############");
+    eh_mdebugfl(UDP_INPUT, IPV4_FORMATIO":%d->"IPV4_FORMATIO":%d len:%d",
+        ipv4_formatio(ip_msg->ip_hdr.src_addr), eh_ntoh16(udp_hdr->source),
+        ipv4_formatio(ip_msg->ip_hdr.dst_addr), eh_ntoh16(udp_hdr->dest), udp_data_len);
+    eh_mdebugfl(UDP_INPUT, "check: %#hx", udp_hdr->check);
     if(!ip_message_flag_is_fragment(ip_msg)){
-        eh_modeule_debugfl(UDP_INPUT,"payload %.*hhq", ehip_buffer_get_payload_size(ip_msg->buffer), 
+        eh_mdebugfl(UDP_INPUT,"payload %.*hhq", ehip_buffer_get_payload_size(ip_msg->buffer), 
             (uint8_t *)ehip_buffer_get_payload_ptr(ip_msg->buffer));
+    }
+
+    if( ip_message_rx_data_size(ip_msg) < udp_data_len ){
+        eh_mwarnfl(UDP_INPUT, "ip_message_rx_data_size:%d udp_data_len:%d", 
+            ip_message_rx_data_size(ip_msg), udp_data_len);
+        goto drop;
+    }
+
+    /* 通过HASH找到udp_pcb,如果没有任何的udp_pcb则说明该端口根本无人绑定，那直接丢弃 */
+    key.src_port = udp_hdr->dest;
+    ret = eh_hashtbl_find(udp_hash_tbl, &key, sizeof(struct udp_key), NULL);
+    if(ret < 0){
+        eh_mdebugfl(UDP_INPUT, "port:%d no bind.", eh_ntoh16(udp_hdr->dest));
+        goto drop;
+    }
+
+    if(ip_msg->ip_hdr.protocol == IP_PROTO_UDP){
+
+        trim_len = (ehip_buffer_size_t)ip_message_rx_data_size(ip_msg) - udp_data_len;
+        if(trim_len && ip_message_rx_data_tail_trim(ip_msg, trim_len) < 0){
+            /* 正常来说不可能失败 */
+            eh_merrfl(UDP_INPUT, "udp trim fail");
+            goto drop;
+        }
+        if(udp_hdr->check){
+            /* 计算伪首部校验和 */
+            pseudo_header.src_addr = ip_msg->ip_hdr.src_addr;
+            pseudo_header.dst_addr = ip_msg->ip_hdr.dst_addr;
+            pseudo_header.zero = 0;
+            pseudo_header.proto = IP_PROTO_UDP;
+            pseudo_header.len = udp_hdr->len;
+            udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, &pseudo_header, sizeof(struct pseudo_header));
+            udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, udp_hdr, sizeof(struct udp_hdr));
+            if(ip_message_flag_is_fragment(ip_msg)){
+                ehip_buffer_t *pos_buffer;
+                int tmp_i, tmp_sort_i;
+                uint16_t single_chksum_len;
+                /* 分片数据校验 */
+                ip_message_rx_fragment_for_each(pos_buffer, tmp_i, tmp_sort_i, ip_msg){
+                    single_chksum_len = ehip_buffer_get_payload_size(pos_buffer);
+                    udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, 
+                        ehip_buffer_get_payload_ptr(pos_buffer), single_chksum_len);
+                }
+            }else{
+                udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, 
+                    ehip_buffer_get_payload_ptr(ip_msg->buffer), ehip_buffer_get_payload_size(ip_msg->buffer));
+            }
+            if(udp_checksum != 0x0 && udp_checksum != 0xFFFF){
+                eh_mwarnfl(UDP_INPUT, "udp_hdr checksum error %#hx", udp_hdr->check);
+                goto drop;
+            }
+
+        }
+    }else{
+        /* IP_PROTO_UDPLITE */
+        /* TODO */
+        goto drop;
+    }
+
+    eh_hashtbl_for_each_with_key_safe(udp_hash_tbl, &key, 
+        sizeof(struct udp_key), node_pos, node_tmp_n, node_head){
+        value = eh_hashtbl_node_value(node_pos);
+        base_pcb = (struct udp_pcb *)value->pcb;
+        if(!udp_pcb_is_any(base_pcb)){
+            restrict_pcb = (struct udp_pcb_restrict *)base_pcb;
+            if( restrict_pcb->src_ip != ip_msg->ip_hdr.dst_addr ||
+                restrict_pcb->netdev != ip_msg->tx_init_netdev)
+                continue;
+        }
+
+        if(udp_pcb_is_udplite(base_pcb) && ip_msg->ip_hdr.protocol == IP_PROTO_UDP){
+            eh_mdebugfl(UDP_INPUT, "udp_pcb_is_udplite");
+            continue;
+        }
+
+        /* 找到udp_pcb */
+        if(base_pcb->opt.recv_callback){
+            ip_msg_tmp = ip_message_rx_ref_dup(ip_msg);
+            if(ip_msg_tmp == NULL){
+                eh_mwarnfl(UDP_INPUT, "ip_message_rx_ref_dup fail");
+                continue;
+            }
+            base_pcb->opt.recv_callback((udp_pcb_t)base_pcb, ip_msg_tmp->ip_hdr.src_addr, udp_hdr->source, ip_msg_tmp);
+            ip_message_free(ip_msg_tmp);
+        }
+
     }
 drop:
     ip_message_free(ip_msg);
@@ -393,8 +495,8 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     udp_hdr.source = sender->src_port;
     udp_hdr.dest = sender->dts_port;
     
-    pseudo_header.src_ip = sender->src_addr;
-    pseudo_header.dst_ip = sender->dts_addr;
+    pseudo_header.src_addr = sender->src_addr;
+    pseudo_header.dst_addr = sender->dts_addr;
     pseudo_header.zero = 0;
 
     if(is_udplite){
@@ -443,7 +545,6 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
         return 0;
 
     }else if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF){
-        /* TODO */
         ret = ip_message_tx_ready(ip_msg, (const ehip_hw_addr_t*)&sender->loopback_virtual_hw_addr, (const uint8_t *)&udp_hdr);
         if(ret < 0)
             goto exit;
