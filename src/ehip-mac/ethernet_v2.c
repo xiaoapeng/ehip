@@ -28,11 +28,11 @@ static void ethernet_v2_handle(struct ehip_buffer* buf){
     if(payload_size < sizeof(struct eth_hdr) || if_mac == NULL)
         goto drop;
 
-    eh_modeule_debugln( ETHERNET_V2, "dst mac: %02x:%02x:%02x:%02x:%02x:%02x", hdr->dest.addr[0], hdr->dest.addr[1], hdr->dest.addr[2], hdr->dest.addr[3], hdr->dest.addr[4], hdr->dest.addr[5]);
-    eh_modeule_debugln( ETHERNET_V2, "src mac: %02x:%02x:%02x:%02x:%02x:%02x", hdr->src.addr[0], hdr->src.addr[1], hdr->src.addr[2], hdr->src.addr[3], hdr->src.addr[4], hdr->src.addr[5]);
-    eh_modeule_debugln( ETHERNET_V2, "ether type: %04x", eh_ntoh16(hdr->type_or_len));
-    eh_modeule_debugln( ETHERNET_V2, "rx buf size %d", ehip_buffer_get_payload_size(buf));
-    eh_modeule_debugln( ETHERNET_V2, "rx data :|%.*hhq|", ehip_buffer_get_payload_size(buf), ehip_buffer_get_payload_ptr(buf));
+    eh_mdebugln( ETHERNET_V2, "dst mac: %02x:%02x:%02x:%02x:%02x:%02x", hdr->dest.addr[0], hdr->dest.addr[1], hdr->dest.addr[2], hdr->dest.addr[3], hdr->dest.addr[4], hdr->dest.addr[5]);
+    eh_mdebugln( ETHERNET_V2, "src mac: %02x:%02x:%02x:%02x:%02x:%02x", hdr->src.addr[0], hdr->src.addr[1], hdr->src.addr[2], hdr->src.addr[3], hdr->src.addr[4], hdr->src.addr[5]);
+    eh_mdebugln( ETHERNET_V2, "ether type: %04x", eh_ntoh16(hdr->type_or_len));
+    eh_mdebugln( ETHERNET_V2, "rx buf size %d", ehip_buffer_get_payload_size(buf));
+    eh_mdebugln( ETHERNET_V2, "rx data :|%.*hhq|", ehip_buffer_get_payload_size(buf), ehip_buffer_get_payload_ptr(buf));
 
     if(eh_likely(eth_addr_equal_64bits(&hdr->dest, if_mac))){
         buf->packet_type = EHIP_PACKET_TYPE_HOST;

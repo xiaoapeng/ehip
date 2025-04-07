@@ -414,15 +414,15 @@ static void arp_handle(struct ehip_buffer* buf){
     arp_pos += arp_hdr->ar_hln;
     memcpy(&d_ipv4_addr, arp_pos, sizeof(ipv4_addr_t));
 
-    eh_modeule_debugln( ARP, "ar_hrd: %04hx", arp_hdr->ar_hrd);
-    eh_modeule_debugln( ARP, "ar_pro: %04hx", arp_hdr->ar_pro);
-    eh_modeule_debugln( ARP, "ar_hln: %02hhx", arp_hdr->ar_hln);
-    eh_modeule_debugln( ARP, "ar_pln: %02hhx", arp_hdr->ar_pln);
-    eh_modeule_debugln( ARP, "ar_op: %04hx", arp_hdr->ar_op);
-    eh_modeule_debugln( ARP, "s_hw: %.*hhq", arp_hdr->ar_hln, s_hw_addr);
-    eh_modeule_debugln( ARP, "s_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
-    eh_modeule_debugln( ARP, "d_hw: %.*hhq", arp_hdr->ar_hln, d_hw_addr);
-    eh_modeule_debugln( ARP, "d_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
+    eh_mdebugln( ARP, "ar_hrd: %04hx", arp_hdr->ar_hrd);
+    eh_mdebugln( ARP, "ar_pro: %04hx", arp_hdr->ar_pro);
+    eh_mdebugln( ARP, "ar_hln: %02hhx", arp_hdr->ar_hln);
+    eh_mdebugln( ARP, "ar_pln: %02hhx", arp_hdr->ar_pln);
+    eh_mdebugln( ARP, "ar_op: %04hx", arp_hdr->ar_op);
+    eh_mdebugln( ARP, "s_hw: %.*hhq", arp_hdr->ar_hln, s_hw_addr);
+    eh_mdebugln( ARP, "s_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
+    eh_mdebugln( ARP, "d_hw: %.*hhq", arp_hdr->ar_hln, d_hw_addr);
+    eh_mdebugln( ARP, "d_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
 
 	if(eh_unlikely(ipv4_is_multicast(d_ipv4_addr)))
         goto drop;
@@ -529,13 +529,13 @@ valid:
 
 void arp_table_dump(void){
     const struct arp_entry* atp_entry;
-    eh_modeule_infoln( ARP, "############## arp table: ###############");
+    eh_minfoln( ARP, "############## arp table: ###############");
     for(int i = 0; i < (int)EHIP_ARP_CACHE_MAX_NUM; i++){
         atp_entry = _arp_table+i;
         if(atp_entry->state == ARP_STATE_NUD_FAILED) 
             continue;
         
-        eh_modeule_infoln( ARP_DUMP, "ip: %03d.%03d.%03d.%03d mac: %.6hhq if: %s state: %-12s RC/DPT: %6d RT/ST: %6d", 
+        eh_minfoln( ARP_DUMP, "ip: %03d.%03d.%03d.%03d mac: %.6hhq if: %s state: %-12s RC/DPT: %6d RT/ST: %6d", 
             ipv4_addr_to_dec0(atp_entry->ip_addr), ipv4_addr_to_dec1(atp_entry->ip_addr),
             ipv4_addr_to_dec2(atp_entry->ip_addr), ipv4_addr_to_dec3(atp_entry->ip_addr),
             &atp_entry->hw_addr, atp_entry->netdev->param->name, 
