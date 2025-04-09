@@ -43,19 +43,19 @@ struct icmp_hdr {
     };
 };
 
-#define ICMP_TYPE_ECHO_REPLY            0    /* 回显应答 */
-#define ICMP_TYPE_DEST_UNREACH          3    /* Destination Unreachable    */
-#define ICMP_TYPE_SOURCE_QUENCH         4    /* Source Quench        */
-#define ICMP_TYPE_REDIRECT              5    /* Redirect (change route)    */
-#define ICMP_TYPE_ECHO                  8    /* 回显请求 */
-#define ICMP_TYPE_TIME_EXCEEDED         11    /* Time Exceeded        */
-#define ICMP_TYPE_PARAMETERPROB         12    /* Parameter Problem        */
-#define ICMP_TYPE_TIMESTAMP             13    /* Timestamp Request        */
-#define ICMP_TYPE_TIMESTAMPREPLY        14    /* Timestamp Reply        */
-#define ICMP_TYPE_INFO_REQUEST          15    /* Information Request        */
-#define ICMP_TYPE_INFO_REPLY            16    /* Information Reply        */
-#define ICMP_TYPE_ADDRESS               17    /* Address Mask Request        */
-#define ICMP_TYPE_ADDRESSREPLY          18    /* Address Mask Reply        */
+#define ICMP_TYPE_ECHO_REPLY            0       /* 回显应答                      */
+#define ICMP_TYPE_DEST_UNREACH          3       /* Destination Unreachable      */
+#define ICMP_TYPE_SOURCE_QUENCH         4       /* Source Quench                */
+#define ICMP_TYPE_REDIRECT              5       /* Redirect (change route)      */
+#define ICMP_TYPE_ECHO                  8       /* 回显请求                      */
+#define ICMP_TYPE_TIME_EXCEEDED         11      /* Time Exceeded                */
+#define ICMP_TYPE_PARAMETERPROB         12      /* Parameter Problem            */
+#define ICMP_TYPE_TIMESTAMP             13      /* Timestamp Request            */
+#define ICMP_TYPE_TIMESTAMPREPLY        14      /* Timestamp Reply              */
+#define ICMP_TYPE_INFO_REQUEST          15      /* Information Request          */
+#define ICMP_TYPE_INFO_REPLY            16      /* Information Reply            */
+#define ICMP_TYPE_ADDRESS               17      /* Address Mask Request         */
+#define ICMP_TYPE_ADDRESSREPLY          18      /* Address Mask Reply           */
 #define NR_ICMP_TYPES                   18
 
 extern int icmp_fill(struct ip_message *ip_msg);

@@ -28,6 +28,20 @@ void icmp_input(struct ip_message *ip_msg){
             ping_input(ip_msg, icmp_hdr);
             return ;
         }
+
+        case ICMP_TYPE_DEST_UNREACH:
+        case ICMP_TYPE_REDIRECT:
+        case ICMP_TYPE_TIME_EXCEEDED:
+        case ICMP_TYPE_PARAMETERPROB:
+
+            break;
+        case ICMP_TYPE_SOURCE_QUENCH:
+        case ICMP_TYPE_TIMESTAMP:
+        case ICMP_TYPE_TIMESTAMPREPLY:
+        case ICMP_TYPE_INFO_REQUEST:
+        case ICMP_TYPE_INFO_REPLY:
+        case ICMP_TYPE_ADDRESS:
+        case ICMP_TYPE_ADDRESSREPLY:
         default:
             break;
     }
