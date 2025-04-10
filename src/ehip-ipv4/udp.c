@@ -83,7 +83,6 @@ struct arp_changed_action{
 };
 
 static eh_hashtbl_t         udp_hash_tbl;
-static eh_sclock_t          udp_sender_refresh_timeout; 
 
 static int udp_pcb_base_init(struct udp_pcb *pcb, uint16_be_t bind_port){
     struct eh_hashtbl_node          *node;
@@ -138,13 +137,11 @@ static int udp_sender_force_refresh(struct udp_sender *sender){
     memset(&route, 0, sizeof(struct route_info));
     
     sender->last_check_time = eh_get_clock_monotonic_time();
-    sender->netdev = NULL;
-    sender->src_addr = IPV4_ADDR_ANY;
-    sender->gw_addr = IPV4_ADDR_ANY;
+    sender->route_type = ROUTE_TABLE_UNREACHABLE;
 
     if(udp_pcb_is_any(base_pcb)){
         /* 检查路由是否可达 */
-        route_type = ipv4_route_lookup(sender->dts_addr, NULL, &route, &best_src_addr);
+        route_type = ipv4_route_lookup(sender->dst_addr, NULL, &route, &best_src_addr);
         if(route_type == ROUTE_TABLE_UNREACHABLE)
             return EHIP_RET_UNREACHABLE;
         sender->src_addr = best_src_addr;
@@ -161,31 +158,28 @@ static int udp_sender_force_refresh(struct udp_sender *sender){
         }
 
         /* 检查路由是否可达 */
-        route_type = ipv4_route_lookup(sender->dts_addr, restrict_pcb->netdev, &route, NULL);
+        route_type = ipv4_route_lookup(sender->dst_addr, restrict_pcb->netdev, &route, NULL);
         if(route_type == ROUTE_TABLE_UNREACHABLE)
             return EHIP_RET_UNREACHABLE;
         sender->src_addr = restrict_pcb->src_ip;
     }
 
-    if(route_type == ROUTE_TABLE_LOCAL || route_type == ROUTE_TABLE_LOCAL_SELF){
-        if( !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(route.netdev)) )
-            return EHIP_RET_UNREACHABLE;
-        sender->netdev = loopback_default_netdev();
-        sender->loopback_virtual_hw_addr = route.netdev;
-    }else{
-        sender->netdev = route.netdev;
-        sender->gw_addr = route.gateway;
+    if( (route_type == ROUTE_TABLE_LOCAL || route_type == ROUTE_TABLE_LOCAL_SELF ) && 
+        !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(route.netdev))){
+        return EHIP_RET_UNREACHABLE;
     }
-
+    
     if(!(ehip_netdev_flags_get(sender->netdev) & EHIP_NETDEV_STATUS_UP))
         return EHIP_RET_UNREACHABLE;
 
+    sender->netdev = route.netdev;
+    sender->gw_addr = route.gateway;
     sender->route_type = route_type;
     return 0;
 }
 
 static int udp_sender_refresh(struct udp_sender *sender){
-    if(eh_diff_time(eh_get_clock_monotonic_time(), sender->last_check_time) > udp_sender_refresh_timeout){
+    if(sender->route_type == ROUTE_TABLE_UNREACHABLE || eh_diff_time(eh_get_clock_monotonic_time(), sender->last_check_time) > (eh_sclock_t)eh_msec_to_clock(UDP_SENDER_REFRESH_TIMEOUT)){
         return udp_sender_force_refresh(sender);
     }
     return 0;
@@ -418,12 +412,12 @@ void ehip_udp_set_error_callback(udp_pcb_t _pcb,
 
 
 int ehip_udp_sender_init_ready(udp_pcb_t _pcb, struct udp_sender *sender, 
-    ipv4_addr_t dts_addr, uint16_be_t dts_port){
+    ipv4_addr_t dst_addr, uint16_be_t dst_port){
     struct udp_pcb *pcb = (struct udp_pcb *)_pcb;
     sender->pcb = _pcb;
     sender->arp_idx_cache = -1;
-    sender->dts_addr = dts_addr;
-    sender->dts_port = dts_port;
+    sender->dst_addr = dst_addr;
+    sender->dst_port = dst_port;
     sender->src_port = ((const struct udp_key*)eh_hashtbl_node_const_key(pcb->node))->src_port;
     sender->ip_msg = NULL;
     return udp_sender_force_refresh(sender);
@@ -442,19 +436,25 @@ int ehip_udp_sender_add_buffer(struct udp_sender *sender,
     struct ip_message* tx_msg = NULL;
     struct udp_pcb *pcb = (struct udp_pcb *)sender->pcb;
 
-    if(sender->netdev == NULL)
-        return EH_RET_INVALID_STATE;
+    if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
+        return EHIP_RET_UNREACHABLE;
 
     if(!sender->ip_msg){
         uint8_t ttl;
-        if(sender->route_type == ROUTE_TABLE_MULTICAST && ipv4_is_local_multicast(sender->dts_addr)){
+        ehip_netdev_t       *netdev;
+        if(sender->route_type == ROUTE_TABLE_MULTICAST && ipv4_is_local_multicast(sender->dst_addr)){
             ttl = 1;
         }else{
             ttl = EHIP_IP_DEFAULT_TTL;
         }
-        sender->ip_msg = ip_message_tx_new(sender->netdev, ipv4_make_tos(0, 0), 
+        if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF)
+            netdev = loopback_default_netdev();
+        else
+            netdev = sender->netdev;
+        
+        sender->ip_msg = ip_message_tx_new(netdev, ipv4_make_tos(0, 0), 
             ttl, udp_pcb_is_udplite(pcb)? IP_PROTO_UDPLITE : IP_PROTO_UDP, sender->src_addr, 
-            sender->dts_addr, NULL, 0, sizeof(struct udp_hdr));
+            sender->dst_addr, NULL, 0, sizeof(struct udp_hdr));
         if(sender->ip_msg == NULL)
             return EH_RET_MEM_POOL_EMPTY;
     }
@@ -493,10 +493,10 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     }
 
     udp_hdr.source = sender->src_port;
-    udp_hdr.dest = sender->dts_port;
+    udp_hdr.dest = sender->dst_port;
     
     pseudo_header.src_addr = sender->src_addr;
-    pseudo_header.dst_addr = sender->dts_addr;
+    pseudo_header.dst_addr = sender->dst_addr;
     pseudo_header.zero = 0;
 
     if(is_udplite){
@@ -545,7 +545,7 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
         return 0;
 
     }else if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF){
-        ret = ip_message_tx_ready(ip_msg, (const ehip_hw_addr_t*)&sender->loopback_virtual_hw_addr, (const uint8_t *)&udp_hdr);
+        ret = ip_message_tx_ready(ip_msg, (const ehip_hw_addr_t*)&sender->netdev, (const uint8_t *)&udp_hdr);
         if(ret < 0)
             goto exit;
         ip_tx(sender->ip_msg);
@@ -554,7 +554,7 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     }
 
     /* 单播，或者非局域网多播情况，需要进行ARP处理 */
-    dst_addr_or_gw_addr = sender->gw_addr ? sender->gw_addr : sender->dts_addr;
+    dst_addr_or_gw_addr = sender->gw_addr ? sender->gw_addr : sender->dst_addr;
     ret = arp_query(sender->netdev, dst_addr_or_gw_addr,sender->arp_idx_cache);
     if(ret == EH_RET_NOT_SUPPORTED){
         ret = ARP_MARS_IDX;
@@ -619,7 +619,6 @@ int udp_socket_init(void){
     udp_hash_tbl = eh_hashtbl_create(EH_HASHTBL_DEFAULT_LOADFACTOR);
     if(eh_ptr_to_error(udp_hash_tbl) < 0)
         return eh_ptr_to_error(udp_hash_tbl);
-    udp_sender_refresh_timeout = (eh_sclock_t)eh_msec_to_clock(UDP_SENDER_REFRESH_TIMEOUT);
     return 0;
 }
 

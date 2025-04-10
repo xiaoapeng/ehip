@@ -46,18 +46,11 @@ struct udp_sender {
     ehip_netdev_t       *netdev;
 
     ipv4_addr_t         src_addr;
-    ipv4_addr_t         dts_addr;
-    uint16_be_t         dts_port;
+    ipv4_addr_t         dst_addr;
+    uint16_be_t         dst_port;
     uint16_be_t         src_port;
-
-    union {
-        struct{
-            ipv4_addr_t         gw_addr;
-            int                 arp_idx_cache;
-        };
-        /* 环回模式下以网卡指针值作为物理地址，方便环回rx处理时处理数据包 */
-        ehip_netdev_t           *loopback_virtual_hw_addr;
-    };
+    ipv4_addr_t         gw_addr;
+    int                 arp_idx_cache;
 
 };
 
@@ -129,12 +122,12 @@ extern void ehip_udp_set_error_callback(udp_pcb_t pcb,
  *                           然后重新ehip_udp_sender_add_buffer
  * @param  pcb              ehip_udp_new or ehip_udp_any_new 接口返回的udp上下文句柄
  * @param  sender           udp报文发送器
- * @param  dts_addr         目标地址
- * @param  dts_port         目标端口
+ * @param  dst_addr         目标地址
+ * @param  dst_port         目标端口
  * @return int 
  */
 extern int       ehip_udp_sender_init_ready(udp_pcb_t pcb, struct udp_sender *sender, 
-        ipv4_addr_t dts_addr, uint16_be_t dts_port);
+        ipv4_addr_t dst_addr, uint16_be_t dst_port);
 
 /**
  * @brief                   判断udp报文发送器是否初始化
