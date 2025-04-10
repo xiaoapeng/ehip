@@ -112,7 +112,7 @@ ehip_buffer_t* ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t he
 }
 
 extern ehip_buffer_t* ehip_buffer_new_from_buf(enum ehip_buffer_type type, ehip_buffer_raw_ptr buf){
-    if(!eh_mem_pool_is_from_this(pool_tab[type], buf))
+    if(eh_mem_pool_ptr_to_idx(pool_tab[type], buf) < 0)
         return eh_error_to_ptr(EH_RET_INVALID_PARAM);
     return _ehip_buffer_new(type, 0, buf);
 }
