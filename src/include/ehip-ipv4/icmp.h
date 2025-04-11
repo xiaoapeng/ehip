@@ -11,6 +11,7 @@
 #ifndef _ICMP_H_
 #define _ICMP_H_
 
+#include <eh_types.h>
 #include <ehip-ipv4/ip.h>
 #include <ehip-ipv4/ip_message.h>
 
@@ -20,7 +21,7 @@ extern "C"{
 #endif
 #endif /* __cplusplus */
 
-struct icmp_hdr {
+struct __packed icmp_hdr {
     uint8_t        type;
     uint8_t        code;
     uint16_t        checksum;
