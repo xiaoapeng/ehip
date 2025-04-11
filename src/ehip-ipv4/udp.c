@@ -62,7 +62,7 @@ struct udp_pcb{
 struct udp_pcb_restrict{
     struct udp_pcb                  pcb;
     struct ehip_netdev              *netdev;
-    ipv4_addr_t                     src_ip;
+    ipv4_addr_t                     src_addr;
 };
 
 eh_static_assert(eh_offsetof(struct udp_pcb_restrict, pcb) == 0, "pcb must be the first member of struct");
@@ -145,15 +145,15 @@ static int udp_sender_force_refresh(struct udp_sender *sender){
         if(route_type == ROUTE_TABLE_UNREACHABLE)
             return EHIP_RET_UNREACHABLE;
         sender->src_addr = best_src_addr;
+        sender->netdev = route.netdev;
     }else{
-        int ip_idx = -1;
         struct udp_pcb_restrict *restrict_pcb = (struct udp_pcb_restrict *)sender->pcb;
         struct ipv4_netdev *ipv4_netdev;
 
         ipv4_netdev = ehip_netdev_trait_ipv4_dev(restrict_pcb->netdev);
         /* 检查IP是否有效 */
-        if( restrict_pcb->src_ip != IPV4_ADDR_DHCP_CLIENT && 
-            (ip_idx = ipv4_netdev_get_ipv4_addr_idx(ipv4_netdev, restrict_pcb->src_ip) < 0)){
+        if( restrict_pcb->src_addr != IPV4_ADDR_DHCP_CLIENT && 
+            ipv4_netdev_get_ipv4_addr_idx(ipv4_netdev, restrict_pcb->src_addr) < 0 ){
             return EHIP_RET_ADDR_NOT_EXISTS;
         }
 
@@ -161,18 +161,17 @@ static int udp_sender_force_refresh(struct udp_sender *sender){
         route_type = ipv4_route_lookup(sender->dst_addr, restrict_pcb->netdev, &route, NULL);
         if(route_type == ROUTE_TABLE_UNREACHABLE)
             return EHIP_RET_UNREACHABLE;
-        sender->src_addr = restrict_pcb->src_ip;
+        sender->src_addr = restrict_pcb->src_addr;
     }
 
     if( (route_type == ROUTE_TABLE_LOCAL || route_type == ROUTE_TABLE_LOCAL_SELF ) && 
-        !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(route.netdev))){
+        !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(sender->netdev))){
         return EHIP_RET_UNREACHABLE;
     }
     
     if(!(ehip_netdev_flags_get(sender->netdev) & EHIP_NETDEV_STATUS_UP))
         return EHIP_RET_UNREACHABLE;
 
-    sender->netdev = route.netdev;
     sender->gw_addr = route.gateway;
     sender->route_type = route_type;
     return 0;
@@ -309,7 +308,7 @@ void udp_input(struct ip_message *ip_msg){
         base_pcb = (struct udp_pcb *)value->pcb;
         if(!udp_pcb_is_any(base_pcb)){
             restrict_pcb = (struct udp_pcb_restrict *)base_pcb;
-            if( restrict_pcb->src_ip != ip_msg->ip_hdr.dst_addr ||
+            if( restrict_pcb->src_addr != ip_msg->ip_hdr.dst_addr ||
                 restrict_pcb->netdev != ip_msg->tx_init_netdev)
                 continue;
         }
@@ -342,17 +341,14 @@ udp_pcb_t ehip_udp_new(ipv4_addr_t bind_addr, uint16_be_t bind_port , ehip_netde
     struct udp_pcb_restrict *pcb;
     struct ipv4_netdev* ipv4_netdev;
     int ret;
-    if(!netdev || (ipv4_netdev = ehip_netdev_trait_ipv4_dev(netdev)) == NULL )
+    if(!netdev || (ipv4_netdev = ehip_netdev_trait_ipv4_dev(netdev)) == NULL || ipv4_is_global_bcast(bind_addr) )
         return eh_error_to_ptr(EH_RET_INVALID_PARAM);
-    if(bind_addr != IPV4_ADDR_DHCP_CLIENT && !ipv4_netdev_is_ipv4_addr_valid(ipv4_netdev, bind_addr)){
-        return eh_error_to_ptr(EH_RET_INVALID_PARAM);
-    }
 
     pcb = (struct udp_pcb_restrict*)eh_malloc(sizeof(struct udp_pcb_restrict));
     if(pcb == NULL)
         return eh_error_to_ptr(EH_RET_MALLOC_ERROR);
     memset(pcb, 0, sizeof(struct udp_pcb_restrict));
-    pcb->src_ip = bind_addr;
+    pcb->src_addr = bind_addr;
     pcb->netdev = netdev;
     ret = udp_pcb_base_init((struct udp_pcb*)pcb, bind_port);
     if(ret < 0){
@@ -565,10 +561,6 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
 
     /*  无论是否查询成功都需要缓存arp记录，方便下次快速查询 */
     sender->arp_idx_cache = ret;
-    if(!arp_entry_neigh_is_valid(ret) && arp_get_table_entry(ret)->state != ARP_STATE_NUD_INCOMPLETE){
-        ret = EHIP_RET_UNREACHABLE;
-        goto exit;
-    }
 
     if(arp_entry_neigh_is_valid(ret)){
         /* ARP查询成功 */
