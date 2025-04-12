@@ -159,6 +159,11 @@ extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer
         ((pos_buffer = ip_fragment_msg->rx_fragment->fragment_info[int_tmp_sort_i].fragment_buffer) || 1U); \
         int_tmp_sort_i = ip_fragment_msg->rx_fragment->fragment_sort[++int_tmp_i])
 
+/**
+ * @brief       获取rx的第一个分片片段的 buffer
+ */
+#define ip_message_rx_fragment_first(ip_fragment_msg) \
+    ((ip_fragment_msg)->rx_fragment->fragment_info[ip_fragment_msg->rx_fragment->fragment_sort[0]].fragment_buffer)
 
 /**
  * @brief      遍历一个分片片段的 ip_message_t 结构体
@@ -172,6 +177,17 @@ extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer
          ((pos_buffer = ip_fragment_msg->tx_fragment->fragment_buffer[int_tmp_i]) || 1U); \
          int_tmp_i++)
 
+/**
+ * @brief       获取tx的第一个分片片段的 buffer
+ */
+#define ip_message_tx_fragment_first(ip_fragment_msg) \
+    ((ip_fragment_msg)->tx_fragment->fragment_buffer[0])
+
+
+/**
+ * @brief      获取普通ip message第一个buffer
+ */
+#define ip_message_first(ip_msg) ((ip_msg)->buffer)
 
 /**
  * @brief     释放一个 ip_message_t 结构体,若内部拥有ehip_buffer_t 则一同解除引用
