@@ -211,6 +211,21 @@ arp_query_fail:
     return ARP_CALLBACK_ABORT;
 }
 
+
+static int ehip_udp_send_done(struct udp_sender *sender, const struct udp_hdr *udp_hdr, const ehip_hw_addr_t* hw_addr){
+    /* 处理广播无需ARP */
+    int ret;
+    ret = ip_message_tx_ready(sender->ip_msg, hw_addr, (const uint8_t *)udp_hdr);
+    if(ret < 0){
+        ehip_udp_sender_buffer_clean(sender);
+        return ret;
+    }
+    ip_tx(sender->ip_msg);
+    sender->ip_msg = NULL;
+    return 0;
+}
+
+
 void udp_input(struct ip_message *ip_msg){
     int ret;
     struct udp_hdr *udp_hdr;
@@ -385,12 +400,12 @@ void      ehip_udp_set_flags(udp_pcb_t pcb, uint32_t flags){
     ((struct udp_pcb *)pcb)->flags |= flags << UDP_PCB_PRIVATE_FLAGS_BIT_WIDTH;
 }
 
-extern void ehip_udp_set_userdata(udp_pcb_t _pcb, void *userdata){
+void ehip_udp_set_userdata(udp_pcb_t _pcb, void *userdata){
     struct udp_pcb *pcb = (struct udp_pcb *)_pcb;
     pcb->userdata = userdata;
 }
 
-extern void* ehip_udp_get_userdata(udp_pcb_t pcb){
+void* ehip_udp_get_userdata(udp_pcb_t pcb){
     return ((struct udp_pcb *)pcb)->userdata;
 }
 
@@ -460,7 +475,6 @@ int ehip_udp_sender_add_buffer(struct udp_sender *sender,
 }
 
 
-
 int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     struct udp_pcb *pcb = (struct udp_pcb *)_pcb;
     struct udp_hdr udp_hdr;
@@ -468,7 +482,6 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     uint16_le_t udp_len = 0;
     uint16_le_t udp_fragment_len = 0;
     uint16_t udp_checksum = 0;
-    struct ip_message *ip_msg = sender->ip_msg;
     ehip_buffer_t *pos_buffer;
     bool is_no_chksum = udp_pcb_is_nochksum(pcb);
     bool is_udplite = udp_pcb_is_udplite(pcb);
@@ -500,17 +513,17 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
         ret = EH_RET_NOT_SUPPORTED;
         goto exit;
     }else{
-        if(ip_message_flag_is_fragment(ip_msg)){
-            ip_message_tx_fragment_for_each(pos_buffer, tmp_i, ip_msg){
+        if(ip_message_flag_is_fragment(sender->ip_msg)){
+            ip_message_tx_fragment_for_each(pos_buffer, tmp_i, sender->ip_msg){
                 udp_fragment_len = ehip_buffer_get_payload_size(pos_buffer);
                 udp_len += udp_fragment_len;
                 if(!is_no_chksum)
                     udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, ehip_buffer_get_payload_ptr(pos_buffer), udp_fragment_len);
             }
         }else{
-            udp_len = ehip_buffer_get_payload_size(ip_msg->buffer);
+            udp_len = ehip_buffer_get_payload_size(sender->ip_msg->buffer);
             if(!is_no_chksum)
-                udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, ehip_buffer_get_payload_ptr(ip_msg->buffer), udp_len);
+                udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, ehip_buffer_get_payload_ptr(sender->ip_msg->buffer), udp_len);
         }
 
         udp_hdr.len = eh_hton16(udp_len + (uint16_t)sizeof(struct udp_hdr)) ;
@@ -525,7 +538,6 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
             udp_hdr.check = udp_hdr.check == 0 ? 0xffff : udp_hdr.check;
         }
     }
-    // ip_message_tx_ready(ip_msg, , const uint8_t *head_data)
     
     if(sender->route_type == ROUTE_TABLE_MULTICAST && sender->gw_addr == IPV4_ADDR_ANY){
         /* 处理本地单播无需ARP */
@@ -533,20 +545,11 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
         goto exit;
     }else if(sender->route_type == ROUTE_TABLE_BROADCAST){
         /* 处理广播无需ARP */
-        ret = ip_message_tx_ready(ip_msg, ehip_netdev_trait_broadcast_hw(sender->netdev), (const uint8_t *)&udp_hdr);
-        if(ret < 0)
-            goto exit;
-        ip_tx(sender->ip_msg);
-        sender->ip_msg = NULL;
-        return 0;
+        return ehip_udp_send_done(sender, &udp_hdr, ehip_netdev_trait_broadcast_hw(sender->netdev));
 
     }else if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF){
-        ret = ip_message_tx_ready(ip_msg, (const ehip_hw_addr_t*)&sender->netdev, (const uint8_t *)&udp_hdr);
-        if(ret < 0)
-            goto exit;
-        ip_tx(sender->ip_msg);
-        sender->ip_msg = NULL;
-        goto exit;
+        /* 本地环回 */
+        return ehip_udp_send_done(sender, &udp_hdr, (const ehip_hw_addr_t*)&sender->netdev);
     }
 
     /* 单播，或者非局域网多播情况，需要进行ARP处理 */
@@ -564,12 +567,7 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
 
     if(arp_entry_neigh_is_valid(ret)){
         /* ARP查询成功 */
-        ret = ip_message_tx_ready(ip_msg, (const ehip_hw_addr_t*)&arp_get_table_entry(ret)->hw_addr, (const uint8_t *)&udp_hdr);
-        if(ret < 0)
-            goto exit;
-        ip_tx(sender->ip_msg);
-        sender->ip_msg = NULL;
-        return 0;
+        return ehip_udp_send_done(sender, &udp_hdr, (const ehip_hw_addr_t*)&arp_get_table_entry(ret)->hw_addr);
     }
 
     /* 检查是否在进行ARP查询状态中 */
@@ -587,7 +585,7 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     }
     arp_changed_action->action.callback = arp_callback_udp_send;
     arp_changed_action->action.idx = sender->arp_idx_cache;
-    arp_changed_action->ip_msg = ip_msg;
+    arp_changed_action->ip_msg = sender->ip_msg;
     arp_changed_action->pcb = pcb;
     arp_changed_action->udp_hdr = udp_hdr;
 
