@@ -11,11 +11,8 @@
 #ifndef __IPV4_ARP_H__
 #define __IPV4_ARP_H__
 
-
-#ifndef _ARP_H_
-#define _ARP_H_
-
 #include <stdint.h>
+#include <eh.h>
 #include <eh_types.h>
 #include <eh_signal.h>
 #include <eh_llist.h>
@@ -50,7 +47,6 @@ struct arp_entry{
 	struct ehip_netdev			*netdev;
 	ipv4_addr_t					ip_addr;
 	struct ehip_max_hw_addr		hw_addr;
-	struct eh_llist_head		callback_list;
 	uint8_t						state;
 };
 
@@ -105,24 +101,6 @@ enum change_callback_return{
 	ARP_CALLBACK_ABORT = 1
 };
 
-struct arp_changed_callback{
-	struct eh_llist_node		node;
-	int 						idx;
-	enum change_callback_return (*callback)(struct arp_changed_callback *callback_action);
-};
-
-/**
- * @brief 							arp表项变化回调函数注册
- * @param  callback_action         回调动作结构块
- * @return int 						成功返回0，失败返回负数
- */
-extern int arp_changed_callback_register(struct arp_changed_callback *callback_action);
-
-/**
- * @brief 							arp表项变化回调函数注销
- * @param  callback_action         回调动作结构块
- */
-extern int arp_changed_callback_unregister(struct arp_changed_callback *callback_action);
 
 /**
  * @brief                   如果三层或者以上的协议确认了该IP的可达性，则调用该函数告诉arp层
@@ -157,10 +135,6 @@ extern void arp_table_dump(void);
 }
 #endif
 #endif /* __cplusplus */
-
-
-#endif // _ARP_H_
-
 
 
 #endif

@@ -71,6 +71,9 @@ static void slot_function_arp_1s_timer_handler(eh_event_t *e, void *slot_param){
                  * ARP_STATE_NUD_PROBE 使用单播
                  * ARP_STATE_NUD_INCOMPLETE 使用广播
                  */
+                eh_mdebugfl(ARP_REQUEST, "arp_request_dst: arpidx=%d addr=" IPV4_FORMATIO" retry_cnt=%d ", 
+                    i, ipv4_formatio(arp_table_entry->ip_addr), arp_table_entry->retry_cnt);
+
                 ret = arp_request_dst(arp_table_entry->netdev, arp_table_entry->ip_addr, 
                     arp_table_entry->state == ARP_STATE_NUD_INCOMPLETE ? NULL : &arp_table_entry->hw_addr);
                 if(ret < 0)
@@ -114,8 +117,6 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
     bool is_change;
     struct arp_entry *arp_table_entry = &_arp_table[index];
     uint8_t old_state = arp_table_entry->state;
-    struct eh_llist_node *pos, *next, *prev;
-    struct arp_changed_callback *callback_action;
 
     if(old_state != new_state){
         switch ((enum etharp_state)new_state) {
@@ -151,13 +152,6 @@ static bool arp_state_update_change_notify(int index, const ehip_hw_addr_t *new_
     }
     if(is_change){
         eh_signal_notify(&signal_arp_table_changed);
-
-        eh_llist_for_each_safe(prev, pos, next, &_arp_table[index].callback_list){
-            callback_action = eh_llist_entry(pos, struct arp_changed_callback, node);
-            if(callback_action->callback(callback_action) == ARP_CALLBACK_ABORT)
-                eh_llist_del_node_in_for_each_safe(&_arp_table[index].callback_list, prev, next);
-        }
-
     }
     return is_change;
 }
@@ -550,31 +544,6 @@ void arp_table_dump(void){
     }
 }
 
-
-int arp_changed_callback_register(struct arp_changed_callback *callback_action){
-    eh_param_assert(callback_action);
-    eh_param_assert(callback_action->idx >= 0 && callback_action->idx < (int)EHIP_ARP_CACHE_MAX_NUM);
-    eh_llist_add(&callback_action->node, &_arp_table[callback_action->idx].callback_list);
-    return EH_RET_OK;
-}
-
-
-extern int arp_changed_callback_unregister(struct arp_changed_callback *callback_action){
-    struct eh_llist_node *pos, *next, *prev;
-    eh_param_assert(callback_action);
-    eh_param_assert(callback_action->idx >= 0 && callback_action->idx < (int)EHIP_ARP_CACHE_MAX_NUM);
-
-    prev = (struct eh_llist_node *)(&_arp_table[callback_action->idx].callback_list);
-    eh_llist_for_each_safe(prev, pos, next, &_arp_table[callback_action->idx].callback_list){
-        if(callback_action == eh_llist_entry(pos, struct arp_changed_callback, node)){
-            eh_llist_del_node_in_for_each_safe(&_arp_table[callback_action->idx].callback_list, prev, next);
-            return EH_RET_OK;
-        }
-    }
-    return EH_RET_NOT_EXISTS;
-}
-
-
 static struct ehip_protocol_handle arp_protocol_handle = {
     .ptype = EHIP_PTYPE_ETHERNET_ARP,
     .handle = arp_handle,
@@ -596,11 +565,6 @@ static int __init arp_init(void){
     if(ret < 0) return ret;
     eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
     memset(&_arp_table, 0, sizeof(_arp_table));
-    for(size_t i=0; i<EHIP_ARP_CACHE_MAX_NUM; i++){
-        eh_llist_head_init(&_arp_table[i].callback_list);
-    }
-    
-    eh_llist_head_init(&_arp_table[ARP_MARS_IDX].callback_list);
     memset(&_arp_table[ARP_MARS_IDX].hw_addr, 0xff, sizeof(struct ehip_max_hw_addr));
     _arp_table[ARP_MARS_IDX].ip_addr = IPV4_ADDR_ANY;
     _arp_table[ARP_MARS_IDX].netdev = NULL;
