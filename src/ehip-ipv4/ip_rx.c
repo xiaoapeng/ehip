@@ -56,6 +56,14 @@ static int ip_fragment_find(const struct ip_hdr *ip_hdr){
     return old_index;
 }
 
+static void ip_fragment_clean(void){
+    for(int i = 0; i < (int)EHIP_IP_MAX_IP_FRAGMENT_BUFFER_NUM; i++){
+        if(ip_fragment_reasse_tab[i] == NULL)
+            continue;
+        ip_message_free(ip_fragment_reasse_tab[i]);
+        ip_fragment_reasse_tab[i] = NULL;
+    }
+}
 /**
  * @brief                   组装分片的IP数据包
  * @param  ip_msg           My Param doc
@@ -281,6 +289,7 @@ static int __init ip_protocol_parser_init(void){
 }
 
 static void __exit ip_protocol_parser_exit(void){
+    ip_fragment_clean();
     eh_signal_slot_disconnect(&slot_timer);
     ehip_protocol_handle_unregister(&ip_protocol_handle);
 }
