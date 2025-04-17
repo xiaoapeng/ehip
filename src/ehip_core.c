@@ -206,6 +206,23 @@ void _ehip_core_netdev_down(ehip_netdev_t *netdev){
     eh_timer_stop(eh_signal_to_custom_event(&netdev->signal_watchdog));
 }
 
+static void _ehip_mbox_msg_clean(void){
+    
+    struct ehip_mbox_msg_base *mbox_msg_base;
+    struct eh_llist_node *pos;
+    while((pos = eh_llist_dequeue(&mbox_rx))){
+        mbox_msg_base = eh_llist_entry(pos, struct ehip_mbox_msg_base, node);
+        switch(mbox_msg_base->type) {
+            case EHIP_MBOX_MSG_TYPE_NETDEV_RX:{
+                struct ehip_mbox_msg_rx *mbox_msg_netdev_rx = (struct ehip_mbox_msg_rx *)mbox_msg_base;
+                ehip_buffer_free(mbox_msg_netdev_rx->netdev_buffer);
+                break;
+            }
+        }
+        eh_mem_pool_free(pool_mbox_msg_rx, mbox_msg_base);
+    }
+}
+
 static int __init ehip_core_init(void){
     int ret;
 
@@ -248,6 +265,9 @@ eh_timer_start_error:
 }
 
 static void __exit ehip_core_exit(void){
+
+    _ehip_mbox_msg_clean();
+
     eh_mem_pool_destroy(pool_queue_entry_tx);
     eh_mem_pool_destroy(pool_mbox_msg_rx);
     eh_signal_slot_disconnect(&slot_mbox_rx);
