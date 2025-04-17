@@ -10,6 +10,7 @@
 
 
 #include <eh.h>
+#include <eh_signal.h>
 #include <eh_platform.h>
 #include <eh_event.h>
 #include <eh_timer.h>
@@ -75,8 +76,9 @@ struct udp_value{
     udp_pcb_t                 pcb;
 };
 
-struct arp_changed_action{
-    struct arp_changed_callback action;
+struct arp_changed_slot_param{
+    eh_signal_slot_t            slot;
+    int                         idx;
     struct ip_message           *ip_msg;
     struct udp_pcb              *pcb;
     struct udp_hdr              udp_hdr;
@@ -100,7 +102,7 @@ static int udp_pcb_base_init(struct udp_pcb *pcb, uint16_be_t bind_port){
     if(ret < 0)
         goto eh_hashtbl_insert_error;
     pcb->node = node;
-    pcb->action_pool = eh_mem_pool_create(EHIP_POOL_BASE_ALIGN, sizeof(struct arp_changed_action), EHIP_UDP_ARP_CHANGED_ACTION_CNT);
+    pcb->action_pool = eh_mem_pool_create(EHIP_POOL_BASE_ALIGN, sizeof(struct arp_changed_slot_param), EHIP_UDP_ARP_CHANGED_ACTION_CNT);
     if((ret = eh_ptr_to_error(pcb->action_pool)) < 0)
         goto eh_mem_pool_create_error;
     return 0;
@@ -113,15 +115,16 @@ eh_hashtbl_insert_error:
 
 static void udp_pcb_base_deinit(struct udp_pcb * pcb){
     int i;
-    struct arp_changed_action *action;
+    struct arp_changed_slot_param *slot_param;
     if(pcb->node == NULL)
         return;
     
-    eh_mem_pool_for_each(i, pcb->action_pool, action){
+    eh_mem_pool_for_each(i, pcb->action_pool, slot_param){
         if(eh_mem_pool_idx_is_used(pcb->action_pool, i)){
             /* 如果在使用中，就说明被注册进了arp_changed_callback_register，此时需要取消注册，并释放ip_message */
-            arp_changed_callback_unregister(&action->action);
-            ip_message_free(action->ip_msg);
+            eh_signal_slot_disconnect(&slot_param->slot);
+            ip_message_free(slot_param->ip_msg);
+            eh_mem_pool_free(pcb->action_pool, slot_param);
         }
     }
     eh_mem_pool_destroy(pcb->action_pool);
@@ -184,31 +187,34 @@ static int udp_sender_refresh(struct udp_sender *sender){
     return 0;
 }
 
-static enum change_callback_return arp_callback_udp_send(struct arp_changed_callback *callback_action){
-    struct arp_changed_action *action = eh_container_of(callback_action, struct arp_changed_action, action);
+static void slot_function_arp_change_udp_send(eh_event_t *e, void *_slot_param){
+    (void)e;
+    struct arp_changed_slot_param *slot_param = _slot_param;
     int ret;
-    if(!arp_entry_neigh_is_valid(action->action.idx)){
-        if(arp_get_table_entry(action->action.idx)->state != ARP_STATE_NUD_INCOMPLETE){
-            if(action->pcb->opt.error_callback)
-                action->pcb->opt.error_callback((udp_pcb_t)action->pcb, action->ip_msg->ip_hdr.dst_addr, action->udp_hdr.dest, EHIP_RET_UNREACHABLE);
+    if(!arp_entry_neigh_is_valid(slot_param->idx)){
+        if(arp_get_table_entry(slot_param->idx)->state != ARP_STATE_NUD_INCOMPLETE){
+            if(slot_param->pcb->opt.error_callback)
+                slot_param->pcb->opt.error_callback((udp_pcb_t)slot_param->pcb, slot_param->ip_msg->ip_hdr.dst_addr, slot_param->udp_hdr.dest, EHIP_RET_UNREACHABLE);
             goto arp_query_fail;
         }
-        return ARP_CALLBACK_CONTINUE;
+        return ;
     }
 
-    ret = ip_message_tx_ready(action->ip_msg, 
-        &arp_get_table_entry(action->action.idx)->hw_addr, (const uint8_t *)&action->udp_hdr);
+    ret = ip_message_tx_ready(slot_param->ip_msg, 
+        &arp_get_table_entry(slot_param->idx)->hw_addr, (const uint8_t *)&slot_param->udp_hdr);
     if(ret < 0)
         goto ip_message_tx_ready_error;
 
-    ip_tx(action->ip_msg);
-    eh_mem_pool_free(action->pcb->action_pool, action);
-    return ARP_CALLBACK_ABORT;
+    ip_tx(slot_param->ip_msg);
+    eh_signal_slot_disconnect(&slot_param->slot);
+    eh_mem_pool_free(slot_param->pcb->action_pool, slot_param);
+    return ;
+
 ip_message_tx_ready_error:
 arp_query_fail:
-    ip_message_free(action->ip_msg);
-    eh_mem_pool_free(action->pcb->action_pool, action);
-    return ARP_CALLBACK_ABORT;
+    eh_signal_slot_disconnect(&slot_param->slot);
+    ip_message_free(slot_param->ip_msg);
+    eh_mem_pool_free(slot_param->pcb->action_pool, slot_param);
 }
 
 
@@ -487,7 +493,7 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     bool is_udplite = udp_pcb_is_udplite(pcb);
     int tmp_i;
     int ret = 0;
-    struct arp_changed_action *arp_changed_action;
+    struct arp_changed_slot_param *slot_param;
     ipv4_addr_t dst_addr_or_gw_addr;
 
     if(sender->ip_msg == NULL)
@@ -578,27 +584,22 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     }
 
     /* 进行ARP查询，注册ARP查询回调 */
-    arp_changed_action = eh_mem_pool_alloc(pcb->action_pool);
-    if(arp_changed_action == NULL){
+    slot_param = eh_mem_pool_alloc(pcb->action_pool);
+    if(slot_param == NULL){
         ret = EH_RET_MEM_POOL_EMPTY;
         goto exit;
     }
-    arp_changed_action->action.callback = arp_callback_udp_send;
-    arp_changed_action->action.idx = sender->arp_idx_cache;
-    arp_changed_action->ip_msg = sender->ip_msg;
-    arp_changed_action->pcb = pcb;
-    arp_changed_action->udp_hdr = udp_hdr;
 
-    ret = arp_changed_callback_register(&arp_changed_action->action);
-    if(ret < 0){
-        eh_warnfl("arp_changed_callback_register fail %d", ret);
-        goto make_ip_message_tx_fail;
-    }
+    eh_signal_slot_init(&slot_param->slot, slot_function_arp_change_udp_send, slot_param);
+    slot_param->idx = sender->arp_idx_cache;
+    slot_param->ip_msg = sender->ip_msg;
+    slot_param->pcb = pcb;
+    slot_param->udp_hdr = udp_hdr;
+
+    eh_signal_slot_connect(&signal_arp_table_changed, &slot_param->slot);
     sender->ip_msg = NULL;
 
     return 0;
-make_ip_message_tx_fail:
-    eh_mem_pool_free(pcb->action_pool, arp_changed_action);
 exit:
     ehip_udp_sender_buffer_clean(sender);
     return ret;
