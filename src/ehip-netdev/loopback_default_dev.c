@@ -47,10 +47,11 @@ static int loopback_default_start_xmit(ehip_netdev_t *netdev, ehip_buffer_t *buf
     buf->packet_type = EHIP_PACKET_TYPE_LOOPBACK;
     buf->netdev = loopback_hdr->virtual_hw_addr;
     ehip_buffer_head_reduce(buf, sizeof(struct loopback_hdr));
-    return ehip_rx(buf);
+    ehip_rx(buf);
+    return EH_RET_OK;
 drop:
     ehip_buffer_free(buf);
-    return EH_RET_INVALID_STATE;
+    return EH_RET_OK;
 }
 
 static void loopback_default_tx_timeout(ehip_netdev_t *netdev){
