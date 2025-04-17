@@ -51,7 +51,6 @@ int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_
     return -1;
 }
 
-//通过IP地址匹配地址索引
 int ipv4_netdev_get_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t ipv4_addr){
     int i;
     for(i = 0; i < ipv4_dev->ipv4_addr_num; i++){
