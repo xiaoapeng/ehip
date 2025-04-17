@@ -69,6 +69,7 @@ void ip_message_free(struct ip_message *msg){
                 ehip_buffer_free(pos_buffer);
             }
             eh_mem_pool_free(ip_rx_fragment_pool, msg->rx_fragment);
+            eh_mdebugfl(RX_FRAGMENT, "eh_mem_pool_free(ip_rx_fragment_pool)");
         }
     }else{
         if(msg->buffer && ( !ip_message_flag_is_tx(msg) || ip_message_flag_is_tx_buffer_init(msg)))
@@ -482,6 +483,7 @@ struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer
         goto ip_message_rx_new_err;
     }
     new_msg->rx_fragment = eh_mem_pool_alloc(ip_rx_fragment_pool);
+    eh_mdebugfl(RX_FRAGMENT, "eh_mem_pool_alloc(ip_rx_fragment_pool)");
     if(new_msg->rx_fragment == NULL)
         goto eh_mem_pool_alloc_ip_rx_fragment_fail;
     new_msg->flags |= IP_MESSAGE_FLAG_FRAGMENT;
@@ -676,6 +678,7 @@ struct ip_message *ip_message_rx_ref_dup(struct ip_message *msg){
     }
     /* RX 分片模式 */
     new_msg->rx_fragment = eh_mem_pool_alloc(ip_rx_fragment_pool);
+    eh_mdebugfl(RX_FRAGMENT, "eh_mem_pool_alloc(ip_rx_fragment_pool)");
     if(new_msg->rx_fragment == NULL)
         goto ip_rx_fragment_pool_eh_mem_pool_alloc_error;
     
