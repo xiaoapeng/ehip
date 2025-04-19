@@ -152,6 +152,11 @@
 #define EHIP_IP_DEFAULT_TTL                                     64
 #endif
 
+/* ping pcb数量 */
+#ifndef EHIP_PING_PCB_NUM
+#define EHIP_PING_PCB_NUM                                       4U
+#endif
+
 #ifndef EHIP_PING_ARP_CHANGED_ACTION_CNT
 #define EHIP_PING_ARP_CHANGED_ACTION_CNT                        4U
 #endif
