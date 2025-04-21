@@ -59,6 +59,23 @@ struct __packed icmp_hdr {
 #define ICMP_TYPE_ADDRESSREPLY          18      /* Address Mask Reply           */
 #define NR_ICMP_TYPES                   18
 
+#define ICMP_CODE_NET_UNREACH	            0   /* 网络不可达                    */
+#define ICMP_CODE_HOST_UNREACH	            1   /* 主机不可达                    */
+#define ICMP_CODE_PROT_UNREACH	            2   /* 协议不可达                    */
+#define ICMP_CODE_PORT_UNREACH	            3   /* 端口不可达                    */
+#define ICMP_CODE_FRAG_NEEDED	            4   /* 段太长，需要分片              */
+#define ICMP_CODE_SR_FAILED		            5   /* 源路由失败                    */
+#define ICMP_CODE_NET_UNKNOWN	            6   /* 未知网络                      */
+#define ICMP_CODE_HOST_UNKNOWN	            7   /* 未知主机                      */
+#define ICMP_CODE_HOST_ISOLATED	            8   /* 主机孤立                      */
+#define ICMP_CODE_NET_ANO		            9   /* 网络被禁止                    */
+#define ICMP_CODE_HOST_ANO		            10  /* 未知主机                      */
+#define ICMP_CODE_NET_UNR_TOS	            11  /* 网络不可达，TOS               */
+#define ICMP_CODE_HOST_UNR_TOS	            12  /* 未知主机，TOS                 */
+#define ICMP_CODE_PKT_FILTERED	            13  /* 数据被过滤                    */
+#define ICMP_CODE_PREC_VIOLATION	        14  /* 主机越权                      */
+#define ICMP_CODE_PREC_CUTOFF	            15  /* 预处理被截断                   */
+
 extern int icmp_fill(struct ip_message *ip_msg);
 
 #ifdef __cplusplus
