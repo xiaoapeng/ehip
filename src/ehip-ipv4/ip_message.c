@@ -552,7 +552,7 @@ int ip_message_rx_data_tail_trim(struct ip_message *msg_hander, ehip_buffer_size
 }
 
 int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
-    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type, bool is_copy){
+    ehip_buffer_size_t size, uint8_t *out_standby_buffer, enum _ip_message_read_advanced_type type, bool is_copy){
 
     // 单次读的最大数据量
     ehip_buffer_size_t              single_max_read_size = 0;
@@ -564,8 +564,8 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
         size = single_max_read_size < size ? single_max_read_size : size;
         if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP ){
             if(is_copy){
-                memcpy(out_bak_buffer, ehip_buffer_get_payload_ptr(msg_hander->buffer), size);
-                *out_data = out_bak_buffer;
+                memcpy(out_standby_buffer, ehip_buffer_get_payload_ptr(msg_hander->buffer), size);
+                *out_data = out_standby_buffer;
             }else{
                 *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(msg_hander->buffer);
             }
@@ -587,8 +587,8 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
         if(ehip_buffer_get_payload_size(first_fragment_buffer->fragment_buffer) >= size){
             if(type != IP_MESSAGE_READ_ADVANCED_TYPE_READ_SKIP ){
                 if(is_copy){
-                    memcpy(out_bak_buffer, ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer), size);
-                    *out_data = out_bak_buffer;
+                    memcpy(out_standby_buffer, ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer), size);
+                    *out_data = out_standby_buffer;
                 }else{
                     *out_data = (uint8_t *)ehip_buffer_get_payload_ptr(first_fragment_buffer->fragment_buffer);
                }
@@ -599,7 +599,7 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
             }
             return size;
         }
-        write_data_ptr = out_bak_buffer;
+        write_data_ptr = out_standby_buffer;
 
         ip_message_rx_fragment_for_each(buffer, tmp_i, sort_i, msg_hander){
             fragment_size = ehip_buffer_get_payload_size(buffer);
@@ -619,7 +619,7 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
             if(size == 0)
                 break;
         }
-        return write_data_ptr - out_bak_buffer;
+        return write_data_ptr - out_standby_buffer;
     }
     
 

@@ -203,20 +203,20 @@ enum _ip_message_read_advanced_type{
 };
 
 extern int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_data, 
-    ehip_buffer_size_t size, uint8_t *out_bak_buffer, enum _ip_message_read_advanced_type type, bool is_copy);
+    ehip_buffer_size_t size, uint8_t *out_standby_buffer, enum _ip_message_read_advanced_type type, bool is_copy);
 
 /**
  * @brief                   读取一个ip_message_t中的数据
  * @param  msg              msg description
  * @param  out_data         输出
  * @param  size             要读的数据大小
- * @param  out_bak_buffer   如果读取的是分片的数据，则需要拼接到一个临时buffer中
+ * @param  out_standby_buffer   如果读取的是分片的数据，则需要拼接到一个临时buffer中
  * @return int              失败返回负数，成功返回读取的数据大小
  */
 static inline int ip_message_rx_read(struct ip_message *msg, uint8_t **out_data, 
-    ehip_buffer_size_t size, uint8_t *out_bak_buffer){
+    ehip_buffer_size_t size, uint8_t *out_standby_buffer){
     return _ip_message_rx_read_advanced(msg, out_data, size, 
-        out_bak_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ, false);
+        out_standby_buffer, IP_MESSAGE_READ_ADVANCED_TYPE_NORMAL_READ, false);
 }
 /**
  * @brief                   读取一个ip_message_t中的数据,并直接覆盖到out_data中
