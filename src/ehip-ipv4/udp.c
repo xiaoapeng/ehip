@@ -231,6 +231,29 @@ static int ehip_udp_send_done(struct udp_sender *sender, const struct udp_hdr *u
     return 0;
 }
 
+void udp_error_input(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
+    (void)err_sender;
+    const struct udp_hdr *udp_hdr;
+    struct udp_key key;
+    struct eh_hashtbl_node *node_pos, *node_tmp_n;
+    struct udp_value *value;
+    struct eh_list_head *node_head;
+    struct udp_pcb *base_pcb;
+
+    if(payload_len < (int)sizeof(struct udp_hdr))
+        return ;
+    udp_hdr = (const struct udp_hdr *)payload;
+    /* 通过HASH找到udp_pcb,如果没有任何的udp_pcb则说明该端口根本无人绑定，那直接丢弃 */
+    key.src_port = udp_hdr->dest;
+    eh_hashtbl_for_each_with_key_safe(udp_hash_tbl, &key, 
+        sizeof(struct udp_key), node_pos, node_tmp_n, node_head){
+        value = eh_hashtbl_node_value(node_pos);
+        base_pcb = (struct udp_pcb *)value->pcb;
+        if(base_pcb->opt.error_callback){
+            base_pcb->opt.error_callback((udp_pcb_t)base_pcb, ip_hdr->dst_addr, udp_hdr->dest, error);
+        }
+    }
+}
 
 void udp_input(struct ip_message *ip_msg){
     int ret;
