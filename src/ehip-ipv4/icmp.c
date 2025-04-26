@@ -23,7 +23,7 @@ void icmp_input(struct ip_message *ip_msg){
     if(ret != sizeof(struct icmp_hdr)){
         goto drop;
     }
-    
+
     checksum = ehip_inet_chksum_accumulated(checksum, (uint8_t*)icmp_hdr, sizeof(struct icmp_hdr));
     if(ip_message_flag_is_fragment(ip_msg)){
         ehip_buffer_t *pos_buffer;
@@ -57,9 +57,11 @@ void icmp_input(struct ip_message *ip_msg){
         case ICMP_TYPE_DEST_UNREACH:
         case ICMP_TYPE_REDIRECT:
         case ICMP_TYPE_TIME_EXCEEDED:
-        case ICMP_TYPE_PARAMETERPROB:
-
-            break;
+        case ICMP_TYPE_PARAMETERPROB:{
+            void icmp_error_input(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr);
+            icmp_error_input(ip_msg, icmp_hdr);
+            return ;
+        }
         case ICMP_TYPE_SOURCE_QUENCH:
         case ICMP_TYPE_TIMESTAMP:
         case ICMP_TYPE_TIMESTAMPREPLY:

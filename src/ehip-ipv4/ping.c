@@ -126,7 +126,7 @@ static int ehip_ping_request_done(struct ping_pcb *pcb, struct ping_request *pin
     }
     eh_timer_restart(eh_signal_to_custom_event(&pcb->signal_timeout));
     ip_tx(pcb->ip_msg);
-    ret = 0;
+    ret = pcb->seq;
 exit:
     pcb->seq++;
     pcb->ip_msg = NULL;
@@ -383,6 +383,35 @@ void ping_input(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr){
     return ;
 }
 
+void ping_error_input(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
+    const struct icmp_hdr *icmp_hdr;
+    uint16_t id;
+    struct ping_pcb *pcb;
+    if(payload_len < (int)sizeof(struct icmp_hdr))
+        return ;
+
+    icmp_hdr = (const struct icmp_hdr *)payload;
+    if(icmp_hdr->type != ICMP_TYPE_ECHO)
+        return ;
+    id = icmp_hdr->echo.id;
+    
+    if( id >= EHIP_PING_PCB_NUM || !eh_mem_pool_idx_is_used(ping_pcb_pool, id) )
+        return ;
+
+    pcb = eh_mem_pool_idx_to_ptr(ping_pcb_pool, id);
+    if( pcb->seq <= icmp_hdr->echo.sequence || 
+        pcb->src_addr != ip_hdr->src_addr ||
+        pcb->dst_addr != ip_hdr->dst_addr )
+        return ;
+
+    if( pcb->seq -1 == icmp_hdr->echo.sequence)
+        eh_timer_stop(eh_signal_to_custom_event(&pcb->signal_timeout));
+
+    if(pcb->opt.error_callback == NULL)
+        return ;
+    pcb->opt.error_callback((ping_pcb_t)pcb, err_sender, icmp_hdr->echo.sequence, error);
+    
+}
 
 ping_pcb_t ehip_ping_new(ipv4_addr_t src_addr, ipv4_addr_t dst_addr, ehip_netdev_t *netdev){
     return _ehip_ping_new(src_addr, dst_addr, netdev, 0);
@@ -578,7 +607,7 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
 
     /* 进行ARP慢查询, 注册ARP查询回调 */
     eh_signal_slot_connect(&signal_arp_table_changed, &pcb->slot_arp);
-    return 0;
+    return pcb->seq;
 free_ip_msg_quit:
     ip_message_free(pcb->ip_msg);
     return ret;

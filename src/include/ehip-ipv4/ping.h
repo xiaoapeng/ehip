@@ -91,7 +91,7 @@ extern void* ehip_ping_get_userdata(ping_pcb_t pcb);
  * @brief                   发送ping请求
  * @param  pcb              ping_pcb
  * @param  data_len         ping数据长度
- * @return int 
+ * @return int              成功返回请求seq，请求seq >= 0, 负数失败
  */
 extern int ehip_ping_request(ping_pcb_t pcb, uint16_t data_len);
 
