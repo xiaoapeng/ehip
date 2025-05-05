@@ -629,17 +629,17 @@ exit:
 }
 
 
-int udp_socket_init(void){
+int udp_init(void){
     udp_hash_tbl = eh_hashtbl_create(EH_HASHTBL_DEFAULT_LOADFACTOR);
     if(eh_ptr_to_error(udp_hash_tbl) < 0)
         return eh_ptr_to_error(udp_hash_tbl);
     return 0;
 }
 
-void udp_socket_exit(void){
+void udp_exit(void){
     eh_hashtbl_destroy(udp_hash_tbl);
 }
 
 
-ehip_protocol_module_export(udp_socket_init, udp_socket_exit);
+ehip_protocol_module_export(udp_init, udp_exit);
 
