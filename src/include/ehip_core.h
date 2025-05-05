@@ -25,7 +25,9 @@ extern "C"{
 #endif /* __cplusplus */
 
 
-EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_1s, eh_event_timer_t);//, eh_event_timer_t, EH_TIMER_INIT(signal_timer_1s.custom_event));
+EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_1s, eh_event_timer_t);
+EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_100ms, eh_event_timer_t);
+
 
 
 extern int  _ehip_core_netdev_init(ehip_netdev_t *netdev);

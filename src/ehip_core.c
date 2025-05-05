@@ -35,6 +35,7 @@ static eh_mem_pool_t pool_mbox_msg_rx;
 static eh_mem_pool_t pool_queue_entry_tx;
 
 EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_1s, eh_event_timer_t,  EH_TIMER_INIT(signal_ehip_timer_1s.custom_event));
+EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_100ms, eh_event_timer_t,  EH_TIMER_INIT(signal_ehip_timer_100ms.custom_event));
 
 static void  slot_function_mbox_rx(eh_event_t *e, void *slot_param){
     (void)e;
@@ -233,7 +234,17 @@ static int __init ehip_core_init(void){
     ret = eh_signal_register(&signal_ehip_timer_1s);
     if(ret < 0) return ret;
     ret = eh_timer_start(eh_signal_to_custom_event(&signal_ehip_timer_1s));
-    if(ret < 0) goto eh_timer_start_error;
+    if(ret < 0) goto eh_timer_1s_start_error;
+
+    eh_timer_advanced_init(
+        eh_signal_to_custom_event(&signal_ehip_timer_100ms), 
+        (eh_sclock_t)eh_msec_to_clock(100*1), 
+        EH_TIMER_ATTR_AUTO_CIRCULATION);
+    ret = eh_signal_register(&signal_ehip_timer_100ms);
+    if(ret < 0) goto eh_signal_register_timer_100ms_error;
+    ret = eh_timer_start(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
+    if(ret < 0) goto eh_timer_100ms_start_error;
+
     /* 注册连接邮箱RX信号和槽 */
     ret = eh_signal_register(&signal_mbox_rx);
     if(ret < 0) goto eh_signal_register_mbox_rx_error;
@@ -258,8 +269,12 @@ eh_mem_pool_create_mbox_msg_netdev_rx_error:
     eh_signal_slot_disconnect(&slot_mbox_rx);
     eh_signal_unregister(&signal_mbox_rx);
 eh_signal_register_mbox_rx_error:
+    eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
+eh_timer_100ms_start_error:
+    eh_signal_unregister(&signal_ehip_timer_100ms);
+eh_signal_register_timer_100ms_error:
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));
-eh_timer_start_error:
+eh_timer_1s_start_error:
     eh_signal_unregister(&signal_ehip_timer_1s);
     return ret;
 }
@@ -272,6 +287,8 @@ static void __exit ehip_core_exit(void){
     eh_mem_pool_destroy(pool_mbox_msg_rx);
     eh_signal_slot_disconnect(&slot_mbox_rx);
     eh_signal_unregister(&signal_mbox_rx);
+    eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
+    eh_signal_unregister(&signal_ehip_timer_100ms);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));
     eh_signal_unregister(&signal_ehip_timer_1s);
 }
