@@ -26,6 +26,7 @@
 #include <ehip_module.h>
 #include <ehip_conf.h>
 #include <ehip_chksum.h>
+#include <ehip_netdev_trait.h>
 #include <ehip-ipv4/ip.h>
 #include <ehip-ipv4/ip_message.h>
 #include <ehip-ipv4/arp.h>
@@ -181,18 +182,26 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     ehip_netdev_t *in_netdev, *out_netdev;
     struct route_info  out_route;
     struct arp_changed_slot_param *slot_param;
+    ipv4_addr_t  best_src_addr;
+
     /* 准备回复 */
     in_netdev = ip_message_get_netdev(ip_msg);
     /* 查路由表，找到最佳路径 */
-    route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, in_netdev, &out_route, NULL);
+    route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, in_netdev, &out_route, &best_src_addr);
     if(route_type != ROUTE_TABLE_UNICAST && route_type != ROUTE_TABLE_LOCAL_SELF){
         goto unreachable_target;
     }
 
     out_netdev = route_type == ROUTE_TABLE_LOCAL_SELF ? loopback_default_netdev() : out_route.netdev;
+
+    if(!ipv4_netdev_is_local_broadcast(ehip_netdev_trait_ipv4_dev(out_netdev), ip_msg->ip_hdr.dst_addr) && !ipv4_is_global_bcast(ip_msg->ip_hdr.dst_addr)){
+        /* 目的地址不是本地广播地址 */
+        best_src_addr = ip_msg->ip_hdr.dst_addr;
+    }
+
     /* 生成回复的 ip报文,header_reserved_size将设置为0，因为下面会将icmp头部当作数据的一部分来处理 */
     ip_msg_reply = ip_message_tx_new(out_netdev, ipv4_make_tos(0, 0), 
-        EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, ip_msg->ip_hdr.dst_addr, ip_msg->ip_hdr.src_addr, NULL, 0, 0);
+        EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, best_src_addr, ip_msg->ip_hdr.src_addr, NULL, 0, 0);
     if(ip_msg_reply == NULL)
         goto unreachable_target;
     
