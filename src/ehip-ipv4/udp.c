@@ -629,14 +629,14 @@ exit:
 }
 
 
-int udp_init(void){
+static int udp_init(void){
     udp_hash_tbl = eh_hashtbl_create(EH_HASHTBL_DEFAULT_LOADFACTOR);
     if(eh_ptr_to_error(udp_hash_tbl) < 0)
         return eh_ptr_to_error(udp_hash_tbl);
     return 0;
 }
 
-void udp_exit(void){
+static void udp_exit(void){
     eh_hashtbl_destroy(udp_hash_tbl);
 }
 
