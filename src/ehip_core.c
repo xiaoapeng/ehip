@@ -54,7 +54,7 @@ static void  slot_function_mbox_rx(eh_event_t *e, void *slot_param){
         eh_mem_pool_free(pool_mbox_msg_rx, mbox_msg_base);
     }
 }
-EH_DEFINE_SLOT(slot_mbox_rx, slot_function_mbox_rx, NULL);
+static EH_DEFINE_SLOT(slot_mbox_rx, slot_function_mbox_rx, NULL);
 
 static void slot_function_start_xmit(eh_event_t *e, void *slot_param){
     (void)e;
