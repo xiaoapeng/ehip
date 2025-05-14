@@ -38,7 +38,7 @@ struct ehip_protocol_handle;
 
 #define EHIP_NETDEV_STATUS_UP                           0x00000001    /* 网卡是否运行 */
 #define EHIP_NETDEV_STATUS_TX_BUSY                      0x00000002    /* 网卡是否忙碌中，忙碌中无法调用ndo_start_xmit */
-
+#define EHIP_NETDEV_STATUS_LINK                         0x00000004    /* 网卡是否进入LINK状态 */
 
 struct ehip_netdev{
     struct eh_list_head                                 node;
@@ -117,6 +117,14 @@ extern void ehip_netdev_protocol_handle_unregister(ehip_netdev_t *netdev, struct
  */
 extern ehip_netdev_t * ehip_netdev_find(char *netdev_name);
 
+
+/**
+ * @brief                   设置网卡LINK状态
+ * @param  netdev           网卡句柄
+ * @param  status           网卡LINK状态
+ */
+ extern void ehip_netdev_set_link_status(ehip_netdev_t *netdev, bool status);
+
 /**
  * @brief                   启动网卡
  * @param  netdev           网卡句柄
@@ -137,6 +145,8 @@ extern void ehip_netdev_down(ehip_netdev_t *netdev);
  */
 #define ehip_netdev_flags_get(netdev)   eh_event_flags_get(eh_signal_to_custom_event(&(netdev)->signal_status))
 
+
+#define ehip_netdev_signal_flags(netdev) (&(netdev)->signal_status)
 
 #ifdef __cplusplus
 #if __cplusplus

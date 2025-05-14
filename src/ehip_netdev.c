@@ -94,6 +94,15 @@ ehip_netdev_t * ehip_netdev_find(char *netdev_name){
 }
 
 
+void ehip_netdev_set_link_status(ehip_netdev_t *netdev, bool status){
+    if(status){
+        eh_event_flags_set_bits(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_LINK);
+    }else{
+        eh_event_flags_clear_bits(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_LINK);
+    }
+}
+
+
 int ehip_netdev_up(ehip_netdev_t *netdev){
     int ret;
     ret = ehip_netdev_trait_up(netdev);
