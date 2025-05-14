@@ -26,12 +26,13 @@ static eh_mem_pool_t pool_tab[EHIP_BUFFER_TYPE_MAX];
 static eh_mem_pool_t pool_ehip_buffer_ref;
 static eh_mem_pool_t pool_ehip_buffer;
 struct ehip_pool_info {
+    const char *name;
     ehip_buffer_size_t    size;
     ehip_buffer_size_t    num;
     ehip_buffer_size_t    align;
 };
 static const struct ehip_pool_info ehip_pool_info_tab[EHIP_BUFFER_TYPE_MAX] = {
-    [EHIP_BUFFER_TYPE_GENERAL_FRAME] = {EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_SIZE, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_NUM, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_ALIGN}
+    [EHIP_BUFFER_TYPE_GENERAL_FRAME] = {"general-network-buffer", EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_SIZE, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_NUM, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_ALIGN}
 };
 
 static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0, ehip_buffer_raw_ptr buffer_raw_ptr){
@@ -43,13 +44,13 @@ static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_s
     
     buf = eh_mem_pool_alloc(pool_ehip_buffer);
     if(buf == NULL){
-        eh_errfl("type: pool_ehip_buffer alloc fail");
+        eh_merrfl(EHIP_BUFFER, "type: pool_ehip_buffer alloc fail");
         return eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
     }
     
     buf_ref = eh_mem_pool_alloc(pool_ehip_buffer_ref);
     if(buf_ref == NULL){
-        eh_errfl("type: pool_ehip_buffer_ref alloc fail");
+        eh_merrfl(EHIP_BUFFER, "type: pool_ehip_buffer_ref alloc fail");
         ret = EH_RET_MEM_POOL_EMPTY;
         goto eh_mem_pool_alloc_buffer_ref_fail;
     }
@@ -83,7 +84,7 @@ void ehip_buffer_free(ehip_buffer_t* buf){
     if(buf->buffer_ref->ref_cnt > 0){
         buf->buffer_ref->ref_cnt--;
     }else{
-        eh_warnfl("ref_cnt == 0");
+        eh_mwarnfl(EHIP_BUFFER, "ref_cnt == 0");
     }
     if(buf->buffer_ref->ref_cnt == 0){
         eh_mem_pool_free(pool_tab[buf->buffer_ref->type], buf->buffer_ref->buffer);
@@ -191,16 +192,20 @@ static __init int ehip_buffer_init(void){
         ret = eh_ptr_to_error(pool_tab[i]);
         if(ret < 0)
             goto eh_mem_pool_create_fail;
+        eh_mdebugfl(EHIP_BUFFER, "mem pool [%s]:%#0p", info->name, pool_tab[i]);
     }
 
     pool_ehip_buffer_ref = eh_mem_pool_create(sizeof(void*), sizeof(struct ehip_buffer_ref), sum_num);
     ret = eh_ptr_to_error(pool_ehip_buffer_ref);
     if(ret < 0)
         goto create_ehip_buffer_ref_pool_fail;
+    eh_mdebugfl(EHIP_BUFFER, "mem pool [ehip_buffer_ref]:%#0p", pool_ehip_buffer_ref);
+    
     pool_ehip_buffer = eh_mem_pool_create(sizeof(void*), sizeof(struct ehip_buffer), EHIP_NETDEV_POLL_BUFFER_MAX_NUM);
     ret = eh_ptr_to_error(pool_ehip_buffer);
     if(ret < 0)
         goto create_ehip_buffer_fail;
+    eh_mdebugfl(EHIP_BUFFER, "mem pool [ehip_buffer]:%#0p", pool_ehip_buffer);
 
     return 0;
 
