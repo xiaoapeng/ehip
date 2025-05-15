@@ -81,7 +81,8 @@ void ip_message_free(struct ip_message *msg){
 
 struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
-    uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size){
+    uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size, 
+    enum route_table_type route_type ){
     struct ip_message * new_msg;
 
     if(netdev == NULL || (options_bytes && options_bytes_size > IP_OPTIONS_MAX_LEN) ){
@@ -99,8 +100,13 @@ struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     new_msg->ip_hdr.dst_addr = dst_addr;
     new_msg->ip_hdr.ihl = 0xF & ((sizeof(struct ip_hdr) + options_bytes_size + 3) >> 2);
 
-    new_msg->tx_init_netdev = netdev;
+    if(route_type == ROUTE_TABLE_LOCAL || route_type == ROUTE_TABLE_LOCAL_SELF){
+        new_msg->tx_init_netdev = loopback_default_netdev();
+    }else{
+        new_msg->tx_init_netdev = netdev;
+    }
     new_msg->tx_header_size = header_reserved_size;
+    new_msg->route_type = (uint8_t)route_type;
 
     if(options_bytes && options_bytes_size > 0){
         new_msg->options_bytes = eh_mem_pool_alloc(options_bytes_pool);
@@ -195,9 +201,7 @@ int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_
 }
 
 
-int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr, const uint8_t *head_data){
-    ehip_netdev_t *netdev;
-    int ret;
+int ip_message_tx_ready(struct ip_message *msg_hander, const uint8_t *head_data){
     ehip_buffer_t *buffer;
     uint8_t *header_data_buffer = NULL;
     struct ip_hdr * ip_hdr_buffer;
@@ -215,9 +219,6 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
         /* 没有进行分片 */
         buffer = msg_hander->buffer;
 
-        netdev = buffer->netdev;
-
-        
         /* 填充上层（udp/tcp/icmp/igmp等）的头部数据 */
         if( msg_hander->tx_header_size ){
             header_data_buffer = ehip_buffer_head_append(buffer, msg_hander->tx_header_size);
@@ -247,14 +248,6 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
         if(!loopback_is_loopback_netdev(buffer->netdev))
             ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(&msg_hander->ip_hdr));
 
-        ret = ehip_netdev_trait_hard_header( netdev, buffer, 
-            ehip_netdev_trait_hw_addr(netdev), dst_hw_addr, 
-            EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(buffer) );
-        if(ret < 0)
-            return ret;
-        ret = ehip_netdev_trait_buffer_padding(netdev, buffer);
-        if(ret < 0)
-            return ret;
         msg_hander->flags |= IP_MESSAGE_FLAG_TX_READY;
         return EH_RET_OK;
     }
@@ -268,9 +261,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
     msg_hander->ip_hdr.id = get_ip_message_id();
     msg_hander->ip_hdr.frag_off = 0;
     offset = 0;
-    netdev = tx_fragment->fragment_buffer[0]->netdev;
 
-    
     /* 填充上层（udp/tcp/icmp/igmp等）的头部数据 */
     if( msg_hander->tx_header_size ){
         buffer = tx_fragment->fragment_buffer[0];
@@ -312,14 +303,6 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst
         if(!loopback_is_loopback_netdev(buffer->netdev))
             ip_hdr_buffer->check = ehip_inet_chksum(ip_hdr_buffer, ipv4_hdr_len(ip_hdr_buffer));
 
-        ret = ehip_netdev_trait_hard_header( netdev, buffer, 
-            ehip_netdev_trait_hw_addr(netdev), dst_hw_addr,
-            EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(buffer));
-        if(ret < 0)
-            return ret;
-        ret = ehip_netdev_trait_buffer_padding(netdev, buffer);
-        if(ret < 0)
-            return ret;
     }
     msg_hander->flags |= IP_MESSAGE_FLAG_TX_READY;
     return EH_RET_OK;
@@ -465,7 +448,7 @@ static void _ip_message_rx_free(struct ip_message *msg){
     eh_mem_pool_free(ip_message_pool, msg);
 }
 
-struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
+struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type){
     (void)netdev;
     struct ip_message * new_msg = _ip_message_rx_new(ip_hdr);
     if(new_msg == NULL){
@@ -473,10 +456,11 @@ struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffe
         return NULL;
     }
     new_msg->buffer = buffer;
+    new_msg->route_type = (uint8_t)route_type;
     return new_msg;
 }
 
-struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
+struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type){
     (void)netdev;
     struct ip_message * new_msg = _ip_message_rx_new(ip_hdr);
     if(new_msg == NULL){
@@ -500,6 +484,7 @@ struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer
     new_msg->rx_fragment->fragment_info[0].fragment_start_offset = ipv4_hdr_offset(ip_hdr);
     new_msg->rx_fragment->fragment_info[0].fragment_end_offset = (uint16_t)(ipv4_hdr_offset(ip_hdr) + ipv4_hdr_body_len(ip_hdr));
     new_msg->rx_fragment->expires_cd = EHIP_IP_FRAGMENT_TIMEOUT;
+    new_msg->route_type = (uint8_t)route_type;
     return new_msg;
 
 eh_mem_pool_alloc_ip_rx_fragment_fail:

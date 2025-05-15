@@ -57,7 +57,6 @@ struct udp_pcb{
     uint32_t                        flags;
     struct eh_hashtbl_node          *node;
     struct udp_opt                  opt;
-    eh_mem_pool_t                   action_pool;
 };
 
 struct udp_pcb_restrict{
@@ -74,14 +73,6 @@ struct udp_key{
 
 struct udp_value{
     udp_pcb_t                 pcb;
-};
-
-struct arp_changed_slot_param{
-    eh_signal_slot_t            slot;
-    int                         idx;
-    struct ip_message           *ip_msg;
-    struct udp_pcb              *pcb;
-    struct udp_hdr              udp_hdr;
 };
 
 static eh_hashtbl_t         udp_hash_tbl;
@@ -102,32 +93,17 @@ static int udp_pcb_base_init(struct udp_pcb *pcb, uint16_be_t bind_port){
     if(ret < 0)
         goto eh_hashtbl_insert_error;
     pcb->node = node;
-    pcb->action_pool = eh_mem_pool_create(EHIP_POOL_BASE_ALIGN, sizeof(struct arp_changed_slot_param), EHIP_UDP_ARP_CHANGED_ACTION_CNT);
-    if((ret = eh_ptr_to_error(pcb->action_pool)) < 0)
-        goto eh_mem_pool_create_error;
     return 0;
     
-eh_mem_pool_create_error:
 eh_hashtbl_insert_error:
     eh_hashtbl_node_delete(udp_hash_tbl, node);
     return ret;
 }
 
 static void udp_pcb_base_deinit(struct udp_pcb * pcb){
-    int i;
-    struct arp_changed_slot_param *slot_param;
     if(pcb->node == NULL)
         return;
     
-    eh_mem_pool_for_each(i, pcb->action_pool, slot_param){
-        if(eh_mem_pool_idx_is_used(pcb->action_pool, i)){
-            /* 如果在使用中，就说明被注册进了arp_changed_callback_register，此时需要取消注册，并释放ip_message */
-            eh_signal_slot_disconnect(&slot_param->slot);
-            ip_message_free(slot_param->ip_msg);
-            eh_mem_pool_free(pcb->action_pool, slot_param);
-        }
-    }
-    eh_mem_pool_destroy(pcb->action_pool);
     eh_hashtbl_node_delete(udp_hash_tbl, pcb->node);
     pcb->node = NULL;
 }
@@ -187,49 +163,6 @@ static int udp_sender_refresh(struct udp_sender *sender){
     return 0;
 }
 
-static void slot_function_arp_change_udp_send(eh_event_t *e, void *_slot_param){
-    (void)e;
-    struct arp_changed_slot_param *slot_param = _slot_param;
-    int ret;
-    if(!arp_entry_neigh_is_valid(slot_param->idx)){
-        if(arp_get_table_entry(slot_param->idx)->state != ARP_STATE_NUD_INCOMPLETE){
-            if(slot_param->pcb->opt.error_callback)
-                slot_param->pcb->opt.error_callback((udp_pcb_t)slot_param->pcb, slot_param->ip_msg->ip_hdr.dst_addr, slot_param->udp_hdr.dest, EHIP_RET_UNREACHABLE);
-            goto arp_query_fail;
-        }
-        return ;
-    }
-
-    ret = ip_message_tx_ready(slot_param->ip_msg, 
-        &arp_get_table_entry(slot_param->idx)->hw_addr, (const uint8_t *)&slot_param->udp_hdr);
-    if(ret < 0)
-        goto ip_message_tx_ready_error;
-
-    ip_tx(slot_param->ip_msg);
-    eh_signal_slot_disconnect(&slot_param->slot);
-    eh_mem_pool_free(slot_param->pcb->action_pool, slot_param);
-    return ;
-
-ip_message_tx_ready_error:
-arp_query_fail:
-    eh_signal_slot_disconnect(&slot_param->slot);
-    ip_message_free(slot_param->ip_msg);
-    eh_mem_pool_free(slot_param->pcb->action_pool, slot_param);
-}
-
-
-static int ehip_udp_send_done(struct udp_sender *sender, const struct udp_hdr *udp_hdr, const ehip_hw_addr_t* hw_addr){
-    /* 处理广播无需ARP */
-    int ret;
-    ret = ip_message_tx_ready(sender->ip_msg, hw_addr, (const uint8_t *)udp_hdr);
-    if(ret < 0){
-        ehip_udp_sender_buffer_clean(sender);
-        return ret;
-    }
-    ip_tx(sender->ip_msg);
-    sender->ip_msg = NULL;
-    return 0;
-}
 
 void udp_error_input(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
     (void)err_sender;
@@ -481,20 +414,15 @@ int ehip_udp_sender_add_buffer(struct udp_sender *sender,
 
     if(!sender->ip_msg){
         uint8_t ttl;
-        ehip_netdev_t       *netdev;
         if(sender->route_type == ROUTE_TABLE_MULTICAST && ipv4_is_local_multicast(sender->dst_addr)){
             ttl = 1;
         }else{
             ttl = EHIP_IP_DEFAULT_TTL;
         }
-        if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF)
-            netdev = loopback_default_netdev();
-        else
-            netdev = sender->netdev;
-        
-        sender->ip_msg = ip_message_tx_new(netdev, ipv4_make_tos(0, 0), 
+
+        sender->ip_msg = ip_message_tx_new(sender->netdev, ipv4_make_tos(0, 0), 
             ttl, udp_pcb_is_udplite(pcb)? IP_PROTO_UDPLITE : IP_PROTO_UDP, sender->src_addr, 
-            sender->dst_addr, NULL, 0, sizeof(struct udp_hdr));
+            sender->dst_addr, NULL, 0, sizeof(struct udp_hdr), sender->route_type);
         if(sender->ip_msg == NULL)
             return EH_RET_MEM_POOL_EMPTY;
     }
@@ -516,8 +444,6 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     bool is_udplite = udp_pcb_is_udplite(pcb);
     int tmp_i;
     int ret = 0;
-    struct arp_changed_slot_param *slot_param;
-    ipv4_addr_t dst_addr_or_gw_addr;
 
     if(sender->ip_msg == NULL)
         return EH_RET_INVALID_PARAM;
@@ -569,60 +495,18 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     }
     
     if(sender->route_type == ROUTE_TABLE_MULTICAST && sender->gw_addr == IPV4_ADDR_ANY){
-        /* 处理本地单播无需ARP */
+        /* 处理本地多播无需ARP */
         /* TODO */
         goto exit;
-    }else if(sender->route_type == ROUTE_TABLE_BROADCAST){
-        /* 处理广播无需ARP */
-        return ehip_udp_send_done(sender, &udp_hdr, ehip_netdev_trait_broadcast_hw(sender->netdev));
-
-    }else if(sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF){
-        /* 本地环回 */
-        return ehip_udp_send_done(sender, &udp_hdr, (const ehip_hw_addr_t*)&sender->netdev);
     }
-
-    /* 单播，或者非局域网多播情况，需要进行ARP处理 */
-    dst_addr_or_gw_addr = sender->gw_addr ? sender->gw_addr : sender->dst_addr;
-    ret = arp_query(sender->netdev, dst_addr_or_gw_addr,sender->arp_idx_cache);
-    if(ret == EH_RET_NOT_SUPPORTED){
-        ret = ARP_MARS_IDX;
-    }else if(ret < 0){
-        eh_warnfl("arp_query fail %d", ret);
+    
+    ret = ip_message_tx_ready(sender->ip_msg, (const uint8_t *)&udp_hdr);
+    if(ret < 0)
         goto exit;
-    }
 
-    /*  无论是否查询成功都需要缓存arp记录，方便下次快速查询 */
-    sender->arp_idx_cache = ret;
-
-    if(arp_entry_neigh_is_valid(ret)){
-        /* ARP查询成功 */
-        return ehip_udp_send_done(sender, &udp_hdr, (const ehip_hw_addr_t*)&arp_get_table_entry(ret)->hw_addr);
-    }
-
-    /* 检查是否在进行ARP查询状态中 */
-    if(arp_get_table_entry(ret)->state != ARP_STATE_NUD_INCOMPLETE){
-        /* ARP查询失败 */
-        ret = EHIP_RET_UNREACHABLE;
-        goto exit;
-    }
-
-    /* 进行ARP查询，注册ARP查询回调 */
-    slot_param = eh_mem_pool_alloc(pcb->action_pool);
-    if(slot_param == NULL){
-        ret = EH_RET_MEM_POOL_EMPTY;
-        goto exit;
-    }
-
-    eh_signal_slot_init(&slot_param->slot, slot_function_arp_change_udp_send, slot_param);
-    slot_param->idx = sender->arp_idx_cache;
-    slot_param->ip_msg = sender->ip_msg;
-    slot_param->pcb = pcb;
-    slot_param->udp_hdr = udp_hdr;
-
-    eh_signal_slot_connect(&signal_arp_table_changed, &slot_param->slot);
+    ret = ip_tx(sender->netdev, sender->ip_msg, &sender->arp_idx_cache, sender->gw_addr);
     sender->ip_msg = NULL;
-
-    return 0;
+    return ret;
 exit:
     ehip_udp_sender_buffer_clean(sender);
     return ret;

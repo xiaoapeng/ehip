@@ -69,7 +69,7 @@ static void ip_fragment_clean(void){
  * @param  ip_msg           My Param doc
  * @return struct ip_message* 
  */
-static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
+static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type){
     int index;
     int ret;
     if((index = ip_fragment_find(ip_hdr)) < 0){
@@ -96,7 +96,7 @@ static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr 
     if(ip_fragment_reasse_tab[index] == NULL){
         /* 收到的第一个分片 */
         eh_mdebugln( IP_REASSE, "first fragment!");
-        ip_fragment_reasse_tab[index] = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr);
+        ip_fragment_reasse_tab[index] = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr, route_type);
         return NULL;
     }
 
@@ -227,6 +227,8 @@ static void ip_handle(struct ehip_buffer* buf){
         case ROUTE_TABLE_LOCAL_SELF:
         case ROUTE_TABLE_BROADCAST:
             break;
+        default:
+            goto drop;
     }
 
     /* 去除头部 */
@@ -237,7 +239,7 @@ static void ip_handle(struct ehip_buffer* buf){
         ehip_buffer_t *pos_buffer;
         eh_mdebugln( IP_INPUT, "ip fragment !");
         /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
-        ip_message = ip_reasse(buf, ip_hdr);
+        ip_message = ip_reasse(buf, ip_hdr, route_type);
         if(ip_message == NULL)
             return ;
         eh_mdebugln( IP_INPUT, "ip reassemble success!");
@@ -246,7 +248,7 @@ static void ip_handle(struct ehip_buffer* buf){
         }
     }else{
         /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
-        ip_message = ip_message_rx_new(buf->netdev, buf, ip_hdr);
+        ip_message = ip_message_rx_new(buf->netdev, buf, ip_hdr, route_type);
         if(ip_message == NULL)
             return ;
     }

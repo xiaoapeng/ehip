@@ -11,6 +11,7 @@
 #ifndef _IP_TX_H_
 #define _IP_TX_H_
 
+#include "ehip_netdev.h"
 #include <ehip-ipv4/ip_message.h>
 
 #ifdef __cplusplus
@@ -20,7 +21,7 @@ extern "C"{
 #endif /* __cplusplus */
 
 
-extern void ip_tx(struct ip_message *ip_msg);
+extern int ip_tx(ehip_netdev_t *netdev, struct ip_message *ip_msg, int *arp_idx, ipv4_addr_t gw);
 
 
 #ifdef __cplusplus

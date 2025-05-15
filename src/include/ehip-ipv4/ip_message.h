@@ -16,10 +16,12 @@
 
 #include <eh_types.h>
 #include <eh_mem_pool.h>
-#include <ehip_netdev.h>
-#include <ehip-ipv4/arp.h>
-#include <ehip-mac/hw_addr.h>
 #include <ehip_buffer.h>
+#include <ehip_netdev.h>
+#include <ehip-mac/hw_addr.h>
+#include <ehip-ipv4/arp.h>
+#include <ehip-ipv4/route.h>
+
 
 #ifdef __cplusplus
 #if __cplusplus
@@ -70,6 +72,7 @@ struct ip_message{
 
     uint8_t                             flags;
     uint8_t                             tx_header_size;
+    uint8_t                             route_type;         // 路由类型 enum route_table_type
 };
 
 
@@ -92,11 +95,13 @@ struct ip_message{
  * @param  options_bytes         选项数据
  * @param  options_bytes_size    选项数据的长度
  * @param  header_reserved_size  预留的头部空间大小,此空间一般用于UDP/TCP等协议的头部
+ * @param  route_type            路由类型
  * @return struct ip_message* 
  */
 extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
-     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size);
+     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size, 
+     enum route_table_type route_type);
 
 /**
  * @brief                   往ip tx message中添加一个buffer
@@ -108,12 +113,12 @@ extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
 extern int ip_message_tx_add_buffer(struct ip_message* msg_hander, ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_size);
 
 /**
- * @brief                   完成一个ip tx message的构建,当调用该函数后，会自动填充全部的mac和ip头部
+ * @brief                   完成一个ip tx message的打包,当调用该函数后，
+ *                          会自动填充全部ip头部,若tx_header_size大于0且head_data不为NULL，则会填充应用头部
  * @param  msg_hander       返回由ip_message_tx_new创建的ip_message_t结构体
- * @param  dst_hw_addr      目标物理地址
  * @return int              成功返回0，失败返回负数
  */
-extern int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr_t* dst_hw_addr, const uint8_t *head_data);
+extern int ip_message_tx_ready(struct ip_message *msg_hander, const uint8_t *head_data);
 
 
 /**
@@ -121,9 +126,10 @@ extern int ip_message_tx_ready(struct ip_message *msg_hander, const ehip_hw_addr
  * @param  netdev           接收该报文的网卡
  * @param  buffer           接收到的buffer, buffer的传入意味着所有权的转让，请勿重复unref
  * @param  ip_hdr           解析出的ip头部
+ * @param  route_type            路由类型
  * @return struct ip_message* 
  */
-extern struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr);
+extern struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type);
 
 /**
  * @brief                   创建一个用于接收的IP消息,并且该报文是一个分片报文,可接收后面合并其他分片
@@ -132,7 +138,7 @@ extern struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t
  * @param  ip_hdr           解析出的ip头部
  * @return struct ip_message* 
  */
-extern struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr);
+extern struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type);
 
 
 /**
@@ -189,11 +195,18 @@ extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer
  */
 #define ip_message_first(ip_msg) ((ip_msg)->buffer)
 
+
+/**
+ * @brief       获取ip message的route_type
+ */
+#define ip_message_route_type(ip_msg) ((enum route_table_type)((ip_msg)->route_type))
+
 /**
  * @brief     释放一个 ip_message_t 结构体,若内部拥有ehip_buffer_t 则一同解除引用
  * @param  msg                 要释放的 ip_message_t 结构体
  */
 extern void ip_message_free(struct ip_message *msg);
+
 
 
 enum _ip_message_read_advanced_type{
