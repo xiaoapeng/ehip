@@ -18,6 +18,7 @@ target_sources(ehip PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ip_tx.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/route.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ip_message.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ip_raw_error.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/icmp.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/icmp_error.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ping.c"
