@@ -10,9 +10,11 @@
 #ifndef _ROUTE_H_
 #define _ROUTE_H_
 
-#include <ehip-ipv4/ip.h>
+#include <stdint.h>
+#include <eh_types.h>
 #include <eh_list.h>
 #include <eh_llist.h>
+#include <ehip-ipv4/ip.h>
 
 #ifdef __cplusplus
 #if __cplusplus
@@ -21,13 +23,16 @@ extern "C"{
 #endif /* __cplusplus */
 
 enum route_table_type{
-    ROUTE_TABLE_UNREACHABLE,          /* 网络不可达 */
+    ROUTE_TABLE_UNREACHABLE = 0,      /* 网络不可达 */
     ROUTE_TABLE_MULTICAST,            /* 多播 */
     ROUTE_TABLE_BROADCAST,            /* 广播 */
     ROUTE_TABLE_UNICAST,              /* 单播 */
     ROUTE_TABLE_LOCAL,                /* 本地地址 */
     ROUTE_TABLE_LOCAL_SELF,           /* 本接口地址 */
+    ROUTE_TABLE_MAX,                  /* 本子网地址 */
 };
+
+eh_static_assert(ROUTE_TABLE_MAX <= UINT8_MAX, "Is not support route table type more than 255.");
 
 struct route_info{
     struct ehip_netdev     *netdev;                 /* 路由项指向的网卡 */

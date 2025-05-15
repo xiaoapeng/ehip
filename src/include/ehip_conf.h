@@ -124,18 +124,6 @@
 #define EHIP_ARP_REACHABLE_TIME                                 300U
 #endif
 
-#ifndef EHIP_ARP_DEBUG
-#define EHIP_ARP_DEBUG                                          0U
-#endif
-
-#ifndef EHIP_IP_DEBUG
-#define EHIP_IP_DEBUG                                           0U
-#endif
-
-#ifndef EHIP_ETHERNET_V2_DEBUG
-#define EHIP_ETHERNET_V2_DEBUG                                  0U
-#endif
-
 
 /* 最大IP分片数 */
 #ifndef EHIP_IP_MAX_FRAGMENT_NUM
@@ -157,12 +145,9 @@
 #define EHIP_PING_PCB_NUM                                       4U
 #endif
 
-#ifndef EHIP_PING_ARP_CHANGED_ACTION_CNT
-#define EHIP_PING_ARP_CHANGED_ACTION_CNT                        4U
-#endif
-
-#ifndef EHIP_UDP_ARP_CHANGED_ACTION_CNT
-#define EHIP_UDP_ARP_CHANGED_ACTION_CNT                         4U
+/* arp查询内存池数量,同时最多进行ARP查询ip msg数量，大于该值时会直接抛弃该ip msg */
+#ifndef EHIP_ARP_QUERY_MEM_POOL_NUM                             
+#define EHIP_ARP_QUERY_MEM_POOL_NUM                             8U
 #endif
 
 #endif // _EHIP_CONF_H_
