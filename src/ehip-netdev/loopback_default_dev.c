@@ -20,12 +20,12 @@
 ehip_netdev_t *_lo_netdev;
 
 static int loopback_default_up(ehip_netdev_t *netdev){
-    (void)netdev;
+    ehip_netdev_set_link_status(netdev, true);
     return 0;
 }
 
 static void loopback_default_down(ehip_netdev_t *netdev){
-    (void)netdev;
+    ehip_netdev_set_link_status(netdev, false);
 }
 
 
