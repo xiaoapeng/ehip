@@ -71,7 +71,7 @@ static void slot_function_arp_1s_timer_handler(eh_event_t *e, void *slot_param){
                  * ARP_STATE_NUD_PROBE 使用单播
                  * ARP_STATE_NUD_INCOMPLETE 使用广播
                  */
-                eh_mdebugfl(ARP_REQUEST, "arp_request_dst: arpidx=%d addr=" IPV4_FORMATIO" retry_cnt=%d ", 
+                eh_mdebugfl(ARP, "auto arp request: arpidx=%d addr=" IPV4_FORMATIO" retry_cnt=%d ", 
                     i, ipv4_formatio(arp_table_entry->ip_addr), arp_table_entry->retry_cnt);
 
                 ret = arp_request_dst(arp_table_entry->netdev, arp_table_entry->ip_addr, 
@@ -224,6 +224,9 @@ static int arp_request_dst(ehip_netdev_t *netdev, ipv4_addr_t ipv4_addr, const e
     if(ipv4_is_zeronet(s_ipv4_addr)){
         return EH_RET_INVALID_STATE;
     }
+
+    eh_mdebugfl(ARP, "arp request:" IPV4_FORMATIO , ipv4_formatio(ipv4_addr));
+
     return arp_send_dst(
         eh_hton16(ARPOP_REQUEST), EHIP_PTYPE_ETHERNET_ARP, netdev, 
         ehip_netdev_trait_hw_addr(netdev), NULL,
@@ -408,15 +411,15 @@ static void arp_handle(struct ehip_buffer* buf){
     arp_pos += arp_hdr->ar_hln;
     memcpy(&d_ipv4_addr, arp_pos, sizeof(ipv4_addr_t));
 
-    eh_mdebugln( ARP, "ar_hrd: %04hx", arp_hdr->ar_hrd);
-    eh_mdebugln( ARP, "ar_pro: %04hx", arp_hdr->ar_pro);
-    eh_mdebugln( ARP, "ar_hln: %02hhx", arp_hdr->ar_hln);
-    eh_mdebugln( ARP, "ar_pln: %02hhx", arp_hdr->ar_pln);
-    eh_mdebugln( ARP, "ar_op: %04hx", arp_hdr->ar_op);
-    eh_mdebugln( ARP, "s_hw: %.*hhq", arp_hdr->ar_hln, s_hw_addr);
-    eh_mdebugln( ARP, "s_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
-    eh_mdebugln( ARP, "d_hw: %.*hhq", arp_hdr->ar_hln, d_hw_addr);
-    eh_mdebugln( ARP, "d_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
+    eh_mdebugfl( ARP, "ar_hrd: %04hx", arp_hdr->ar_hrd);
+    eh_mdebugfl( ARP, "ar_pro: %04hx", arp_hdr->ar_pro);
+    eh_mdebugfl( ARP, "ar_hln: %02hhx", arp_hdr->ar_hln);
+    eh_mdebugfl( ARP, "ar_pln: %02hhx", arp_hdr->ar_pln);
+    eh_mdebugfl( ARP, "ar_op: %04hx", arp_hdr->ar_op);
+    eh_mdebugfl( ARP, "s_hw: %.*hhq", arp_hdr->ar_hln, s_hw_addr);
+    eh_mdebugfl( ARP, "s_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
+    eh_mdebugfl( ARP, "d_hw: %.*hhq", arp_hdr->ar_hln, d_hw_addr);
+    eh_mdebugfl( ARP, "d_ip: " IPV4_FORMATIO, ipv4_formatio(s_ipv4_addr));
 
 	if(eh_unlikely(ipv4_is_multicast(d_ipv4_addr)))
         goto drop;
