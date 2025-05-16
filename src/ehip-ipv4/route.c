@@ -31,13 +31,16 @@ struct route_table_entry{
     eh_signal_slot_t        slot_netdev_status_change;          /* 网卡状态变化信号槽 */
     struct route_info       route;                              /* 路由表项 */
 };
-
+uint32_t _route_trait_value = 0;
+EH_DEFINE_SIGNAL(sig_route_changed);
 
 static void _ehip_ipv4_route_delete(struct route_table_entry *entry){
     eh_signal_slot_disconnect(&entry->slot_netdev_status_change);
     eh_list_del(&entry->node);
     eh_free(entry);
     route_cnt--;
+    _route_trait_value ++;
+    eh_signal_notify(&sig_route_changed);
     /* 如果有哈希表缓存，则需要清掉所有缓存 */
 }
 
@@ -45,7 +48,8 @@ static void _ehip_ipv4_route_delete(struct route_table_entry *entry){
 static void netdev_status_change(eh_event_t *e, void *slot_param){
     (void)e;
     struct route_table_entry *entry = slot_param;
-    if(ehip_netdev_flags_get(entry->route.netdev) & EHIP_NETDEV_STATUS_UP)
+    eh_flags_t netdev_flags = ehip_netdev_flags_get(entry->route.netdev);
+    if(netdev_flags & EHIP_NETDEV_STATUS_UP && netdev_flags & EHIP_NETDEV_STATUS_LINK)
         return ;
 
     /* 删除此条路由 */
@@ -107,6 +111,8 @@ int ipv4_route_add(const struct route_info *route){
     /* 注册当网络状态 DOWN时删除该路由 */
     eh_signal_slot_connect(&entry->route.netdev->signal_status, &entry->slot_netdev_status_change);
     route_cnt ++;
+    _route_trait_value ++;
+    eh_signal_notify(&sig_route_changed);
     return 0;
 }
 
@@ -285,12 +291,18 @@ static int __init ehip_ipv4_route_init(void)
 {
     route_cnt = 0;
     eh_list_head_init(&route_head);
+    eh_signal_register(&sig_route_changed);
+
     return 0;
 }
 
 static void __exit ehip_ipv4_route_exit(void)
 {
     struct route_table_entry *pos, *n;
+
+    eh_signal_unregister(&sig_route_changed);
+    eh_signal_clean(&sig_route_changed);
+
     eh_list_for_each_entry_safe(pos, n, &route_head, node)
         _ehip_ipv4_route_delete(pos);
 }

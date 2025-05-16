@@ -23,7 +23,8 @@ extern "C"{
 #endif /* __cplusplus */
 
 enum route_table_type{
-    ROUTE_TABLE_UNREACHABLE = 0,      /* 网络不可达 */
+    ROUTE_TABLE_UNKNOWN = 0,          /* 未知 */
+    ROUTE_TABLE_UNREACHABLE = 1,      /* 网络不可达 */
     ROUTE_TABLE_MULTICAST,            /* 多播 */
     ROUTE_TABLE_BROADCAST,            /* 广播 */
     ROUTE_TABLE_UNICAST,              /* 单播 */
@@ -42,6 +43,10 @@ struct route_info{
     uint16_t                metric;                 /* 路由条目的优先级 */
     uint8_t                 mask_len;               /* 目标掩码长度 */
 };
+
+extern uint32_t _route_trait_value;
+
+EH_EXTERN_SIGNAL(sig_route_changed);
 
 /**
  * @brief                   添加一条路由
@@ -85,6 +90,24 @@ extern enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_
  */
 enum route_table_type ipv4_route_input(ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
     ehip_netdev_t *netdev, struct route_info *route);
+
+/**
+ * @brief  判断路由表是否变化
+ * @param  old_trait_value  路由表特征值
+ * @return bool             路由表变化返回true，否则返回false
+ */
+static inline bool ipv4_route_table_is_changed(uint32_t old_trait_value){
+    return _route_trait_value != old_trait_value;
+}
+
+
+
+/**
+ * @brief  获取路由表现有特征值
+ */
+static inline uint32_t ipv4_route_table_get_trait_value(void){
+    return _route_trait_value;
+}
 
 
 #ifdef __cplusplus
