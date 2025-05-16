@@ -9,6 +9,8 @@
  */
 
 
+#include <stdint.h>
+
 #include <eh.h>
 #include <eh_signal.h>
 #include <eh_platform.h>
@@ -108,59 +110,62 @@ static void udp_pcb_base_deinit(struct udp_pcb * pcb){
     pcb->node = NULL;
 }
 
-static int udp_sender_force_refresh(struct udp_sender *sender){
+static int udp_sender_refresh(struct udp_sender *sender){
     struct route_info route;
     ipv4_addr_t best_src_addr;
-    enum route_table_type route_type;
     struct udp_pcb *base_pcb = (struct udp_pcb *)sender->pcb;
     memset(&route, 0, sizeof(struct route_info));
     
-    sender->last_check_time = eh_get_clock_monotonic_time();
-    sender->route_type = ROUTE_TABLE_UNREACHABLE;
+    if( sender->route_type == ROUTE_TABLE_UNKNOWN ||
+        ipv4_route_table_is_changed(sender->last_route_trait_value)){
+        /* 重新路由 */
+        if(udp_pcb_is_any(base_pcb)){
+            /* 检查路由是否可达 */
+            sender->route_type = ipv4_route_lookup(sender->dst_addr, NULL, &route, &best_src_addr);
+            sender->last_route_trait_value = ipv4_route_table_get_trait_value();
+            if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
+                return EHIP_RET_UNREACHABLE;
+            sender->src_addr = best_src_addr;
+            sender->netdev = route.netdev;
+        }else{
+            struct udp_pcb_restrict *restrict_pcb = (struct udp_pcb_restrict *)sender->pcb;
+            struct ipv4_netdev *ipv4_netdev;
 
-    if(udp_pcb_is_any(base_pcb)){
-        /* 检查路由是否可达 */
-        route_type = ipv4_route_lookup(sender->dst_addr, NULL, &route, &best_src_addr);
-        if(route_type == ROUTE_TABLE_UNREACHABLE)
-            return EHIP_RET_UNREACHABLE;
-        sender->src_addr = best_src_addr;
-        sender->netdev = route.netdev;
-    }else{
-        struct udp_pcb_restrict *restrict_pcb = (struct udp_pcb_restrict *)sender->pcb;
-        struct ipv4_netdev *ipv4_netdev;
+            ipv4_netdev = ehip_netdev_trait_ipv4_dev(restrict_pcb->netdev);
+            /* 检查IP是否有效 */
+            if( restrict_pcb->src_addr != IPV4_ADDR_DHCP_CLIENT && 
+                ipv4_netdev_get_ipv4_addr_idx(ipv4_netdev, restrict_pcb->src_addr) < 0 ){
+                return EHIP_RET_ADDR_NOT_EXISTS;
+            }
 
-        ipv4_netdev = ehip_netdev_trait_ipv4_dev(restrict_pcb->netdev);
-        /* 检查IP是否有效 */
-        if( restrict_pcb->src_addr != IPV4_ADDR_DHCP_CLIENT && 
-            ipv4_netdev_get_ipv4_addr_idx(ipv4_netdev, restrict_pcb->src_addr) < 0 ){
-            return EHIP_RET_ADDR_NOT_EXISTS;
+            /* 检查路由是否可达 */
+            sender->route_type = ipv4_route_lookup(sender->dst_addr, restrict_pcb->netdev, &route, NULL);
+            sender->last_route_trait_value = ipv4_route_table_get_trait_value();
+            if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
+                return EHIP_RET_UNREACHABLE;
+            sender->src_addr = restrict_pcb->src_addr;
         }
 
-        /* 检查路由是否可达 */
-        route_type = ipv4_route_lookup(sender->dst_addr, restrict_pcb->netdev, &route, NULL);
-        if(route_type == ROUTE_TABLE_UNREACHABLE)
-            return EHIP_RET_UNREACHABLE;
-        sender->src_addr = restrict_pcb->src_addr;
-    }
+        sender->gw_addr = route.gateway;
+    }else if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
+        return EHIP_RET_UNREACHABLE;
 
-    if( (route_type == ROUTE_TABLE_LOCAL || route_type == ROUTE_TABLE_LOCAL_SELF ) && 
-        !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(sender->netdev))){
+    if( (sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF ) && 
+        (   !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(sender->netdev)) ||
+            !(ehip_netdev_flags_get(loopback_default_netdev()) & EHIP_NETDEV_STATUS_UP)     )
+    ){
         return EHIP_RET_UNREACHABLE;
     }
     
     if(!(ehip_netdev_flags_get(sender->netdev) & EHIP_NETDEV_STATUS_UP))
         return EHIP_RET_UNREACHABLE;
-
-    sender->gw_addr = route.gateway;
-    sender->route_type = route_type;
     return 0;
 }
 
-static int udp_sender_refresh(struct udp_sender *sender){
-    if(sender->route_type == ROUTE_TABLE_UNREACHABLE || eh_diff_time(eh_get_clock_monotonic_time(), sender->last_check_time) > (eh_sclock_t)eh_msec_to_clock(UDP_SENDER_REFRESH_TIMEOUT)){
-        return udp_sender_force_refresh(sender);
-    }
-    return 0;
+static void ehip_udp_sender_buffer_clean(struct udp_sender *sender){
+    if(sender->ip_msg && sender->ip_msg != (void*) UINTPTR_MAX)
+        ip_message_free(sender->ip_msg);
+    sender->ip_msg = NULL;
 }
 
 
@@ -384,7 +389,7 @@ void ehip_udp_set_error_callback(udp_pcb_t _pcb,
 }
 
 
-int ehip_udp_sender_init_ready(udp_pcb_t _pcb, struct udp_sender *sender, 
+void ehip_udp_sender_init(udp_pcb_t _pcb, struct udp_sender *sender, 
     ipv4_addr_t dst_addr, uint16_be_t dst_port){
     struct udp_pcb *pcb = (struct udp_pcb *)_pcb;
     sender->pcb = _pcb;
@@ -393,15 +398,23 @@ int ehip_udp_sender_init_ready(udp_pcb_t _pcb, struct udp_sender *sender,
     sender->dst_port = dst_port;
     sender->src_port = ((const struct udp_key*)eh_hashtbl_node_const_key(pcb->node))->src_port;
     sender->ip_msg = NULL;
-    return udp_sender_force_refresh(sender);
+    sender->route_type = ROUTE_TABLE_UNKNOWN;
 }
 
 
-void ehip_udp_sender_buffer_clean(struct udp_sender *sender){
-    if(sender->ip_msg){
-        ip_message_free(sender->ip_msg);
-        sender->ip_msg = NULL;
-    }
+void ehip_udp_sender_deinit(struct udp_sender *sender){
+    ehip_udp_sender_buffer_clean(sender);
+}
+
+int   ehip_udp_sender_route_ready(struct udp_sender *sender){
+    int ret;
+    ehip_udp_sender_buffer_clean(sender);
+    ret = udp_sender_refresh(sender);
+    if(ret < 0) return ret;
+
+    /* 做一个标记，意味着 路由已经就绪 */
+    sender->ip_msg = (void*) UINTPTR_MAX;
+    return 0;
 }
 
 int ehip_udp_sender_add_buffer(struct udp_sender *sender, 
@@ -409,10 +422,10 @@ int ehip_udp_sender_add_buffer(struct udp_sender *sender,
     struct ip_message* tx_msg = NULL;
     struct udp_pcb *pcb = (struct udp_pcb *)sender->pcb;
 
-    if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
-        return EHIP_RET_UNREACHABLE;
+    if(sender->ip_msg == NULL)
+        return EH_RET_INVALID_STATE;
 
-    if(!sender->ip_msg){
+    if(sender->ip_msg == (void*) UINTPTR_MAX){
         uint8_t ttl;
         if(sender->route_type == ROUTE_TABLE_MULTICAST && ipv4_is_local_multicast(sender->dst_addr)){
             ttl = 1;
@@ -445,16 +458,8 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     int tmp_i;
     int ret = 0;
 
-    if(sender->ip_msg == NULL)
-        return EH_RET_INVALID_PARAM;
-    
-    ret = udp_sender_refresh(sender);
-    if(ret < 0)
-        goto exit;
-
-    if(sender->route_type == ROUTE_TABLE_UNREACHABLE){
-        goto exit;
-    }
+    if(sender->ip_msg == NULL || sender->ip_msg == (void*) UINTPTR_MAX)
+        return EH_RET_INVALID_STATE;
 
     udp_hdr.source = sender->src_port;
     udp_hdr.dest = sender->dst_port;

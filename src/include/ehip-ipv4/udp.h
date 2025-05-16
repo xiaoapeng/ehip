@@ -39,7 +39,7 @@ typedef int* udp_pcb_t;
 
 struct udp_sender {
     struct ip_message   *ip_msg;
-    eh_clock_t          last_check_time;
+    uint32_t             last_route_trait_value;
     udp_pcb_t           pcb;
 
     enum route_table_type route_type;
@@ -124,22 +124,22 @@ extern void ehip_udp_set_error_callback(udp_pcb_t pcb,
  * @param  sender           udp报文发送器
  * @param  dst_addr         目标地址
  * @param  dst_port         目标端口
- * @return int 
  */
-extern int       ehip_udp_sender_init_ready(udp_pcb_t pcb, struct udp_sender *sender, 
+extern void  ehip_udp_sender_init(udp_pcb_t pcb, struct udp_sender *sender, 
         ipv4_addr_t dst_addr, uint16_be_t dst_port);
 
 /**
- * @brief                   判断udp报文发送器是否初始化
- * @param  sender           udp报文发送器
- * @return bool
+ * @brief                   释放udp发送器
+ * @param   sender          udp发送器
  */
-#define          ehip_udp_sender_is_init(sender)  ((sender)->netdev != NULL)
+extern void ehip_udp_sender_deinit(struct udp_sender *sender);
+
 /**
- * @brief                   清理udp报文发送器
+ * @brief                   检查路由状态，并使sender就绪，在add_buffer前必须调用，调用后内部buffer会被清空。
  * @param  sender           udp报文发送器
+ * @return                  0:成功，负数失败，请检查返回值
  */
-extern void      ehip_udp_sender_buffer_clean(struct udp_sender *sender);
+extern int   ehip_udp_sender_route_ready(struct udp_sender *sender);
 
 /**
  * @brief                                添加udp报文发送缓冲区
