@@ -35,6 +35,7 @@
 #include <ehip-ipv4/ip_tx.h>
 #include <ehip-ipv4/ping.h>
 #include <ehip-mac/loopback.h>
+#include <ehip-ipv4/route_refresh.h>
 
 
 #define PING_SENDER_REFRESH_TIMEOUT   1000ULL
@@ -64,7 +65,7 @@ struct ping_pcb{
     uint32_t                                    flags;
     ipv4_addr_t                                 src_addr;
     ipv4_addr_t                                 dst_addr;
-    struct ehip_netdev                          *netdev;
+    ehip_netdev_t                               *netdev;
     enum route_table_type                       route_type;
     ipv4_addr_t                                 gw_addr;
     uint32_t                                    last_route_trait_value;
@@ -364,51 +365,18 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
     uint8_t *write_ptr;
     uint8_t val = 0;
     struct ip_message *ip_msg;
+    uint32_t flags = ROUTE_REFRESH_FLAGS_ALLOW_UNICAST|ROUTE_REFRESH_FLAGS_ALLOW_LOOPBACK|
+                ROUTE_REFRESH_FLAGS_CHECKED_SRC_ADDR|ROUTE_REFRESH_FLAGS_ALLOW_SRC_ADDR_CHANGE;
 
     if((size_t)data_len < sizeof(eh_sclock_t))
         data_len = sizeof(eh_sclock_t);
 
-    now = eh_get_clock_monotonic_time();
-    if( pcb->route_type == ROUTE_TABLE_UNKNOWN || 
-        ipv4_route_table_is_changed(pcb->last_route_trait_value)){
-        struct route_info route;
-        ipv4_addr_t best_src_addr;
-        if(ping_pcb_is_any(pcb)){
-            /* 检查路由是否可达 */
-            pcb->route_type = ipv4_route_lookup(pcb->dst_addr, NULL, &route, &best_src_addr);
-            pcb->last_route_trait_value = ipv4_route_table_get_trait_value();
-            if(pcb->route_type == ROUTE_TABLE_UNREACHABLE)
-                return EHIP_RET_UNREACHABLE;
-            pcb->src_addr = best_src_addr;
-            pcb->netdev = route.netdev;
-        }else{
-            struct ipv4_netdev *ipv4_netdev;
-            ipv4_netdev = ehip_netdev_trait_ipv4_dev(pcb->netdev);
-            if(ipv4_netdev_get_ipv4_addr_idx(ipv4_netdev, pcb->src_addr) < 0)
-                return EHIP_RET_ADDR_NOT_EXISTS;
-            pcb->route_type = ipv4_route_lookup(pcb->dst_addr, pcb->netdev, &route, &best_src_addr);
-            pcb->last_route_trait_value = ipv4_route_table_get_trait_value();
-            if(pcb->route_type == ROUTE_TABLE_UNREACHABLE)
-                return EHIP_RET_UNREACHABLE;
-        }
+    if(ping_pcb_is_any(pcb))
+        flags |= ROUTE_REFRESH_FLAGS_REFRESH_SRC_ADDR;
 
-        pcb->gw_addr = route.gateway;
-
-    }else if(pcb->route_type == ROUTE_TABLE_UNREACHABLE)
-        return EHIP_RET_UNREACHABLE;
-
-    if( pcb->route_type == ROUTE_TABLE_BROADCAST || pcb->route_type == ROUTE_TABLE_MULTICAST )
-        return EHIP_RET_UNREACHABLE;
-
-    if( (pcb->route_type == ROUTE_TABLE_LOCAL || pcb->route_type == ROUTE_TABLE_LOCAL_SELF ) && 
-        (   !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(pcb->netdev)) ||
-            !(ehip_netdev_flags_get(loopback_default_netdev()) & EHIP_NETDEV_STATUS_UP)     )
-    ){
-        return EHIP_RET_UNREACHABLE;
-    }
-
-    if(!(ehip_netdev_flags_get(pcb->netdev) & EHIP_NETDEV_STATUS_UP))
-        return EHIP_RET_UNREACHABLE;
+    ret = ehip_route_refresh(&pcb->netdev, &pcb->src_addr, pcb->dst_addr, &pcb->gw_addr, &pcb->route_type, &pcb->last_route_trait_value, flags);
+    if(ret < 0)
+        return ret;
 
     ip_msg = ip_message_tx_new(pcb->netdev, ipv4_make_tos(0,0), pcb->ttl, IP_PROTO_ICMP, 
         pcb->src_addr, pcb->dst_addr, NULL, 0, 0, pcb->route_type);
@@ -425,6 +393,7 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
         goto free_ip_msg_quit;
     }
 
+    now = eh_get_clock_monotonic_time();
     ping_request = (struct ping_request*)ehip_buffer_payload_append(out_buffer, sizeof(struct ping_request));
     ping_request->icmp_hdr.type = ICMP_TYPE_ECHO;
     ping_request->icmp_hdr.code = 0;

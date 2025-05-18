@@ -37,6 +37,7 @@
 #include <ehip-ipv4/route.h>
 #include <ehip-ipv4/ip_tx.h>
 #include <ehip-ipv4/_pseudo_header.h>
+#include <ehip-ipv4/route_refresh.h>
 #include <ehip-mac/loopback.h>
 
 
@@ -111,55 +112,23 @@ static void udp_pcb_base_deinit(struct udp_pcb * pcb){
 }
 
 static int udp_sender_refresh(struct udp_sender *sender){
-    struct route_info route;
-    ipv4_addr_t best_src_addr;
     struct udp_pcb *base_pcb = (struct udp_pcb *)sender->pcb;
-    memset(&route, 0, sizeof(struct route_info));
-    
-    if( sender->route_type == ROUTE_TABLE_UNKNOWN ||
-        ipv4_route_table_is_changed(sender->last_route_trait_value)){
-        /* 重新路由 */
-        if(udp_pcb_is_any(base_pcb)){
-            /* 检查路由是否可达 */
-            sender->route_type = ipv4_route_lookup(sender->dst_addr, NULL, &route, &best_src_addr);
-            sender->last_route_trait_value = ipv4_route_table_get_trait_value();
-            if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
-                return EHIP_RET_UNREACHABLE;
-            sender->src_addr = best_src_addr;
-            sender->netdev = route.netdev;
-        }else{
-            struct udp_pcb_restrict *restrict_pcb = (struct udp_pcb_restrict *)sender->pcb;
-            struct ipv4_netdev *ipv4_netdev;
+    uint32_t flags = ROUTE_REFRESH_FLAGS_ALLOW_UNICAST|
+        ROUTE_REFRESH_FLAGS_ALLOW_MULTICAST|ROUTE_REFRESH_FLAGS_ALLOW_BROADCAST|
+        ROUTE_REFRESH_FLAGS_ALLOW_LOOPBACK | ROUTE_REFRESH_FLAGS_ALLOW_SRC_ADDR_CHANGE;
 
-            ipv4_netdev = ehip_netdev_trait_ipv4_dev(restrict_pcb->netdev);
-            /* 检查IP是否有效 */
-            if( restrict_pcb->src_addr != IPV4_ADDR_DHCP_CLIENT && 
-                ipv4_netdev_get_ipv4_addr_idx(ipv4_netdev, restrict_pcb->src_addr) < 0 ){
-                return EHIP_RET_ADDR_NOT_EXISTS;
-            }
-
-            /* 检查路由是否可达 */
-            sender->route_type = ipv4_route_lookup(sender->dst_addr, restrict_pcb->netdev, &route, NULL);
-            sender->last_route_trait_value = ipv4_route_table_get_trait_value();
-            if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
-                return EHIP_RET_UNREACHABLE;
-            sender->src_addr = restrict_pcb->src_addr;
-        }
-
-        sender->gw_addr = route.gateway;
-    }else if(sender->route_type == ROUTE_TABLE_UNREACHABLE)
-        return EHIP_RET_UNREACHABLE;
-
-    if( (sender->route_type == ROUTE_TABLE_LOCAL || sender->route_type == ROUTE_TABLE_LOCAL_SELF ) && 
-        (   !ipv4_netdev_flags_is_loopback_support(ehip_netdev_trait_ipv4_dev(sender->netdev)) ||
-            !(ehip_netdev_flags_get(loopback_default_netdev()) & EHIP_NETDEV_STATUS_UP)     )
-    ){
-        return EHIP_RET_UNREACHABLE;
+    if(!udp_pcb_is_any(base_pcb)){
+        struct udp_pcb_restrict *restrict_pcb = (struct udp_pcb_restrict *)sender->pcb;
+        sender->src_addr = restrict_pcb->src_addr;
+        sender->netdev = restrict_pcb->netdev;
+        if(sender->src_addr != IPV4_ADDR_DHCP_CLIENT)
+            flags |= ROUTE_REFRESH_FLAGS_CHECKED_SRC_ADDR;
+    }else{
+        flags |= ROUTE_REFRESH_FLAGS_REFRESH_SRC_ADDR|ROUTE_REFRESH_FLAGS_CHECKED_SRC_ADDR;
     }
-    
-    if(!(ehip_netdev_flags_get(sender->netdev) & EHIP_NETDEV_STATUS_UP))
-        return EHIP_RET_UNREACHABLE;
-    return 0;
+
+    return ehip_route_refresh(&sender->netdev, &sender->src_addr, sender->dst_addr, 
+        &sender->gw_addr, &sender->route_type, &sender->last_route_trait_value, flags);
 }
 
 static void ehip_udp_sender_buffer_clean(struct udp_sender *sender){
