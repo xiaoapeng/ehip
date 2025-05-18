@@ -41,7 +41,7 @@ int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev, ipv4_
     int i;
     uint32_t mask;
 
-    for(i = 0; 0 < ipv4_dev->ipv4_addr_num; i++){
+    for(i = 0; i < ipv4_dev->ipv4_addr_num; i++){
         mask = ipv4_mask_len_to_mask(ipv4_dev->ipv4_mask_len[i]);
         if( ipv4_dev->ipv4_addr[i] && 
             (ipv4_dev->ipv4_addr[i] & mask) == (dst_addr & mask)){
