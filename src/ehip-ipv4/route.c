@@ -145,7 +145,6 @@ enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_
     uint32_t match_level_tmp = 0;           /* match level 越高则匹配优先级越高 */
     int ip_idx;
     struct ipv4_netdev* ipv4_dev = NULL;
-    ipv4_addr_t best_src_addr_tmp;
     enum route_table_type multicast_or_unicast;
 
     if(dst_netdev_or_null){
@@ -215,17 +214,19 @@ find_route:
     multicast_or_unicast = ipv4_is_multicast(dst_addr) ? ROUTE_TABLE_MULTICAST : ROUTE_TABLE_UNICAST;
     if(route->gateway != IPV4_ADDR_ANY){
         /* 如果是有网关 */
+
         if(route->src_addr != IPV4_ADDR_ANY){
             if(best_src_addr)
                 *best_src_addr = route->src_addr;
             return ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, route->src_addr) ? 
                 multicast_or_unicast : ROUTE_TABLE_UNREACHABLE;
         }
-        best_src_addr_tmp = ipv4_netdev_get_addr(ipv4_dev);
-        if(best_src_addr_tmp == IPV4_ADDR_ANY)
+        
+        ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, route->gateway);
+        if(ip_idx < 0)
             return ROUTE_TABLE_UNREACHABLE;
         if(best_src_addr)
-            *best_src_addr = best_src_addr_tmp;
+            *best_src_addr = ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, ip_idx);;
         return multicast_or_unicast;
     }
 
