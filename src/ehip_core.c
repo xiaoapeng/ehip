@@ -35,6 +35,7 @@ static eh_mem_pool_t pool_mbox_msg_rx;
 static eh_mem_pool_t pool_queue_entry_tx;
 
 EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_1s, eh_event_timer_t,  EH_TIMER_INIT(signal_ehip_timer_1s.custom_event));
+EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_500ms, eh_event_timer_t,  EH_TIMER_INIT(signal_ehip_timer_500ms.custom_event));
 EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_100ms, eh_event_timer_t,  EH_TIMER_INIT(signal_ehip_timer_100ms.custom_event));
 
 static void  slot_function_mbox_rx(eh_event_t *e, void *slot_param){
@@ -237,6 +238,15 @@ static int __init ehip_core_init(void){
     if(ret < 0) goto eh_timer_1s_start_error;
 
     eh_timer_advanced_init(
+        eh_signal_to_custom_event(&signal_ehip_timer_500ms), 
+        (eh_sclock_t)eh_msec_to_clock(100*5), 
+        EH_TIMER_ATTR_AUTO_CIRCULATION);
+    ret = eh_signal_register(&signal_ehip_timer_500ms);
+    if(ret < 0) goto eh_signal_register_timer_500ms_error;
+    ret = eh_timer_start(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
+    if(ret < 0) goto eh_timer_500ms_start_error;
+
+    eh_timer_advanced_init(
         eh_signal_to_custom_event(&signal_ehip_timer_100ms), 
         (eh_sclock_t)eh_msec_to_clock(100*1), 
         EH_TIMER_ATTR_AUTO_CIRCULATION);
@@ -273,6 +283,10 @@ eh_signal_register_mbox_rx_error:
 eh_timer_100ms_start_error:
     eh_signal_unregister(&signal_ehip_timer_100ms);
 eh_signal_register_timer_100ms_error:
+    eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
+eh_timer_500ms_start_error:
+    eh_signal_unregister(&signal_ehip_timer_500ms);
+eh_signal_register_timer_500ms_error:
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));
 eh_timer_1s_start_error:
     eh_signal_unregister(&signal_ehip_timer_1s);
@@ -289,6 +303,8 @@ static void __exit ehip_core_exit(void){
     eh_signal_unregister(&signal_mbox_rx);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
     eh_signal_unregister(&signal_ehip_timer_100ms);
+    eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
+    eh_signal_unregister(&signal_ehip_timer_500ms);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));
     eh_signal_unregister(&signal_ehip_timer_1s);
 }

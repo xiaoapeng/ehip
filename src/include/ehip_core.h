@@ -26,6 +26,7 @@ extern "C"{
 
 
 EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_1s, eh_event_timer_t);
+EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_500ms, eh_event_timer_t);
 EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_100ms, eh_event_timer_t);
 
 
