@@ -84,13 +84,14 @@ struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t *options_bytes, ehip_buffer_size_t options_bytes_size, uint8_t header_reserved_size, 
     enum route_table_type route_type ){
     struct ip_message * new_msg;
+    void *ret;
 
     if(netdev == NULL || (options_bytes && options_bytes_size > IP_OPTIONS_MAX_LEN) ){
-        return NULL;
+        return eh_error_to_ptr(EH_RET_INVALID_PARAM);
     }
     new_msg =  eh_mem_pool_alloc(ip_message_pool);
     if(new_msg == NULL)
-        return NULL;
+        return eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
     memset(new_msg, 0, sizeof(struct ip_message));
     new_msg->flags |= IP_MESSAGE_FLAG_TX;
     new_msg->ip_hdr.tos = tos;
@@ -111,6 +112,7 @@ struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     if(options_bytes && options_bytes_size > 0){
         new_msg->options_bytes = eh_mem_pool_alloc(options_bytes_pool);
         if(new_msg->options_bytes == NULL){
+            ret = eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
             goto options_bytes_pool_eh_mem_pool_alloc_error;
         }
         memcpy(new_msg->options_bytes, options_bytes, options_bytes_size);
@@ -119,7 +121,7 @@ struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     return new_msg;
 options_bytes_pool_eh_mem_pool_alloc_error:
 eh_mem_pool_free(ip_message_pool, new_msg);
-    return NULL;
+    return ret;
 }
 
 
@@ -310,7 +312,7 @@ int ip_message_tx_ready(struct ip_message *msg_hander, const uint8_t *head_data)
 
 
 
-int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
+int ip_message_rx_add_fragment(struct ip_message *fragment, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr){
     uint16_t fragment_start_offset;
     uint16_t fragment_end_offset;
     uint16_t fragment_check_offset;
@@ -453,7 +455,7 @@ struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffe
     struct ip_message * new_msg = _ip_message_rx_new(ip_hdr);
     if(new_msg == NULL){
         ehip_buffer_free(buffer);
-        return NULL;
+        return eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
     }
     new_msg->buffer = buffer;
     new_msg->route_type = (uint8_t)route_type;
@@ -462,14 +464,18 @@ struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffe
 
 struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type){
     (void)netdev;
+    void *ret;
     struct ip_message * new_msg = _ip_message_rx_new(ip_hdr);
     if(new_msg == NULL){
+        ret = eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
         goto ip_message_rx_new_err;
     }
     new_msg->rx_fragment = eh_mem_pool_alloc(ip_rx_fragment_pool);
     eh_mdebugfl(RX_FRAGMENT, "eh_mem_pool_alloc(ip_rx_fragment_pool)");
-    if(new_msg->rx_fragment == NULL)
+    if(new_msg->rx_fragment == NULL){
+        ret = eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
         goto eh_mem_pool_alloc_ip_rx_fragment_fail;
+    }
     new_msg->flags |= IP_MESSAGE_FLAG_FRAGMENT;
     if(ipv4_hdr_is_mf(ip_hdr)){
         new_msg->ip_hdr.tot_len = 0;
@@ -491,7 +497,7 @@ eh_mem_pool_alloc_ip_rx_fragment_fail:
     _ip_message_rx_free(new_msg);
 ip_message_rx_new_err:
     ehip_buffer_free(buffer);
-    return NULL;
+    return ret;
 }
 
 

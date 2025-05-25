@@ -96,7 +96,7 @@ struct ip_message{
  * @param  options_bytes_size    选项数据的长度
  * @param  header_reserved_size  预留的头部空间大小,此空间一般用于UDP/TCP等协议的头部
  * @param  route_type            路由类型
- * @return struct ip_message* 
+ * @return struct ip_message*    应该使用 eh_ptr_to_error 来判断错误码，若成功应该为0，失败为负数
  */
 extern struct ip_message* ip_message_tx_new(ehip_netdev_t *netdev, uint8_t tos,
     uint8_t ttl, uint8_t protocol, ipv4_addr_t src_addr, ipv4_addr_t dst_addr, 
@@ -127,7 +127,7 @@ extern int ip_message_tx_ready(struct ip_message *msg_hander, const uint8_t *hea
  * @param  buffer           接收到的buffer, buffer的传入意味着所有权的转让，请勿重复unref
  * @param  ip_hdr           解析出的ip头部
  * @param  route_type            路由类型
- * @return struct ip_message* 
+ * @return struct ip_message*    应该使用 eh_ptr_to_error 来判断错误码，若成功应该为0，失败为负数
  */
 extern struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type);
 
@@ -136,20 +136,20 @@ extern struct ip_message* ip_message_rx_new(ehip_netdev_t *netdev, ehip_buffer_t
  * @param  netdev           接收该报文的网卡
  * @param  buffer           接收到的buffer, buffer的传入意味着所有权的转让，请勿重复unref
  * @param  ip_hdr           解析出的ip头部
- * @return struct ip_message* 
+ * @return struct ip_message*    应该使用 eh_ptr_to_error 来判断错误码，若成功应该为0，失败为负数
  */
 extern struct ip_message* ip_message_rx_new_fragment(ehip_netdev_t *netdev, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type);
 
 
 /**
- * @brief                将一个新的ip msg合并到分片的 ip_message_t 结构体中
+ * @brief                将一个新的ip msg添加到到分片的 ip_message_t 结构体中
  * @param  fragment      要添加的分片片段的 ip_message_t 结构体
  * @param  buffer        要添加的分片片段的 buffer, buffer的传入意味着所有权的转让，请勿重复unref
  * @param  ip_hdr        要添加的分片片段的 ip 头部
  * @return int           成功返回0，重组完成返回 FRAGMENT_REASSE_FINISH, 失败返回负数
  */
 #define FRAGMENT_REASSE_FINISH  1
-extern int ip_message_rx_merge_fragment(struct ip_message *fragment, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr);
+extern int ip_message_rx_add_fragment(struct ip_message *fragment, ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr);
 
 
 /**
