@@ -86,7 +86,7 @@ static int udp_pcb_base_init(struct udp_pcb *pcb, uint16_be_t bind_port){
     struct udp_value *value;
     int ret;
     key.src_port = bind_port;
-    node = eh_hashtbl_node_new(udp_hash_tbl, &key, (eh_hashtbl_kv_len_t)sizeof(struct udp_key), 
+    node = eh_hashtbl_node_new_refresh(udp_hash_tbl, &key, (eh_hashtbl_kv_len_t)sizeof(struct udp_key), 
         (eh_hashtbl_kv_len_t)sizeof(struct udp_value));
     if(node == NULL)
         return EH_RET_MALLOC_ERROR;
@@ -405,8 +405,8 @@ int ehip_udp_sender_add_buffer(struct udp_sender *sender,
         sender->ip_msg = ip_message_tx_new(sender->netdev, ipv4_make_tos(0, 0), 
             ttl, udp_pcb_is_udplite(pcb)? IP_PROTO_UDPLITE : IP_PROTO_UDP, sender->src_addr, 
             sender->dst_addr, NULL, 0, sizeof(struct udp_hdr), sender->route_type);
-        if(sender->ip_msg == NULL)
-            return EH_RET_MEM_POOL_EMPTY;
+        if(eh_ptr_to_error(sender->ip_msg) < 0)
+            return eh_ptr_to_error(sender->ip_msg);
     }
     tx_msg = sender->ip_msg;
 

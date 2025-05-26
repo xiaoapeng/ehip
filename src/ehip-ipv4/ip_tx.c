@@ -118,6 +118,10 @@ static int ip_tx_done(struct ip_message *ip_msg, const ehip_hw_addr_t* hw_addr){
                 goto quit;
 
             tx_pos_buffer = ehip_buffer_ref_dup(pos_buffer);
+            if(eh_ptr_to_error(tx_pos_buffer) < 0){
+                ret = eh_ptr_to_error(tx_pos_buffer);
+                goto quit;
+            }
             ehip_queue_tx(tx_pos_buffer);
         }
     }else{
@@ -131,6 +135,10 @@ static int ip_tx_done(struct ip_message *ip_msg, const ehip_hw_addr_t* hw_addr){
         if(ret < 0)
             goto quit;
         tx_pos_buffer = ehip_buffer_ref_dup(ip_message_first(ip_msg));
+        if(eh_ptr_to_error(tx_pos_buffer) < 0){
+            ret = eh_ptr_to_error(tx_pos_buffer);
+            goto quit;
+        }
         ehip_queue_tx(tx_pos_buffer);
     }
 quit:

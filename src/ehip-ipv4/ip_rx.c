@@ -64,14 +64,11 @@ static void ip_fragment_clean(void){
         ip_fragment_reasse_tab[i] = NULL;
     }
 }
-/**
- * @brief                   组装分片的IP数据包
- * @param  ip_msg           My Param doc
- * @return struct ip_message* 
- */
+
 static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr *ip_hdr, enum route_table_type route_type){
     int index;
     int ret;
+    struct ip_message* ip_msg = NULL;
     if((index = ip_fragment_find(ip_hdr)) < 0){
         eh_errfl("IP fragment buffer is full, drop fragment.");
         ehip_buffer_free(buffer);
@@ -96,7 +93,12 @@ static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr 
     if(ip_fragment_reasse_tab[index] == NULL){
         /* 收到的第一个分片 */
         eh_mdebugln( IP_REASSE, "first fragment!");
-        ip_fragment_reasse_tab[index] = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr, route_type);
+        ip_msg = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr, route_type);
+        if(eh_ptr_to_error(ip_msg) < 0){
+            eh_mdebugln( IP_REASSE, "ip_message_rx_new_fragment error ret = %d!", ret);
+            return NULL;
+        }
+        ip_fragment_reasse_tab[index] = ip_msg;
         return NULL;
     }
 
@@ -105,7 +107,7 @@ static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr 
     /* 
      * add 对ip_msg不会做任何更改，而是在ehip_buffer 内部引用计数+1 
      */
-    ret = ip_message_rx_merge_fragment(ip_fragment_reasse_tab[index], buffer, ip_hdr);
+    ret = ip_message_rx_add_fragment(ip_fragment_reasse_tab[index], buffer, ip_hdr);
     if(ret < 0){
         ip_message_free(ip_fragment_reasse_tab[index]);
         ip_fragment_reasse_tab[index] = NULL;
@@ -249,7 +251,7 @@ static void ip_handle(struct ehip_buffer* buf){
     }else{
         /* buf传入后本函数已经丧失所有权，若执行失败也无需free buf */
         ip_message = ip_message_rx_new(buf->netdev, buf, ip_hdr, route_type);
-        if(ip_message == NULL)
+        if(eh_ptr_to_error(ip_message) < 0)
             return ;
     }
     /* 到达此行时 ip_hdr 已经不可用，所有权被转移到 ip_message */

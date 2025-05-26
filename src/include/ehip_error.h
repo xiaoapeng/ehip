@@ -33,6 +33,7 @@ extern "C"{
 #define EHIP_RET_REDIRECTED            ((EH_RET_EHIP_ERROR_START) - 12) /* -268  重定向 */
 #define EHIP_RET_TTL_EXPIRED           ((EH_RET_EHIP_ERROR_START) - 13) /* -269  TTL过期，或者分片组合超时 */
 #define EHIP_RET_PARAMETERPROB         ((EH_RET_EHIP_ERROR_START) - 14) /* -270  参数错误 */
+#define EHIP_RET_SRC_PORT_BUSY         ((EH_RET_EHIP_ERROR_START) - 15) /* -271  源端口被占用 */
 
 
 

@@ -63,6 +63,12 @@ struct ehip_buffer{
 };
 
 /**
+ * @brief                   获取buf的缓冲区类型
+ * @return                  buffer type
+ */
+#define ehip_buffer_get_buffer_type(buf) ((buf)->buffer_ref->type)
+
+/**
  * @brief                   获取buf的实例缓冲区指针
  * @return                  buffer ptr该缓冲区可用来读写
  */
@@ -135,14 +141,14 @@ extern void ehip_buffer_free(ehip_buffer_t* buf);
 /**
  * @brief                   复制一个网络数据buf,到一个新的缓冲区中 (深拷贝)
  * @param  src              源缓冲句柄
- * @return ehip_buffer_t* 
+ * @return ehip_buffer_t*   返回值使用 eh_ptr_to_error 判断
  */
 extern ehip_buffer_t* ehip_buffer_dup(ehip_buffer_t* src);
 
 /**
  * @brief                   引用一个网络数据buf，到一个新的缓冲区中 (浅拷贝)
  * @param  buf              源缓冲句柄
- * @return ehip_buffer_t*   返回一个引用源缓冲区的buf句柄
+ * @return ehip_buffer_t*   返回值使用 eh_ptr_to_error 判断
  */
 extern ehip_buffer_t* ehip_buffer_ref_dup(ehip_buffer_t* buf);
 

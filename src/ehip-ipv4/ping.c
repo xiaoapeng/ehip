@@ -119,7 +119,7 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     /* 生成回复的 ip报文,header_reserved_size将设置为0，因为下面会将icmp头部当作数据的一部分来处理 */
     ip_msg_reply = ip_message_tx_new(netdev, ipv4_make_tos(0, 0), 
         EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, best_src_addr, ip_msg->ip_hdr.src_addr, NULL, 0, 0, route_type);
-    if(ip_msg_reply == NULL)
+    if(eh_ptr_to_error(ip_msg_reply) < 0)
         goto unreachable_target;
     
     ret = ip_message_tx_add_buffer(ip_msg_reply, &out_buffer, &out_buffer_capacity_size);
@@ -380,8 +380,8 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
 
     ip_msg = ip_message_tx_new(pcb->netdev, ipv4_make_tos(0,0), pcb->ttl, IP_PROTO_ICMP, 
         pcb->src_addr, pcb->dst_addr, NULL, 0, 0, pcb->route_type);
-    if(ip_msg == NULL)
-        return EH_RET_MEM_POOL_EMPTY;
+    if(eh_ptr_to_error(ip_msg) < 0)
+        return eh_ptr_to_error(ip_msg);
 
     ret = ip_message_tx_add_buffer(ip_msg, &out_buffer, &out_buffer_capacity_size);
     if(ret < 0)
