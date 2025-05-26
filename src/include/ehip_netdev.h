@@ -57,7 +57,7 @@ struct ehip_netdev{
 
     /* ehip_core.c  _ehip_core_netdev_init 和 _ehip_core_netdev_exit 函数中初始化或释放下面的成员 */
     struct eh_llist_head                                tx_queue;
-    EH_STRUCT_SIGNAL                                    signal_tx_wakeup;
+    eh_signal_base_t                                    signal_tx_wakeup;
     EH_STRUCT_CUSTOM_SIGNAL(eh_event_timer_t)           signal_watchdog;
     eh_signal_slot_t                                    slot_tx_wakeup;
     eh_signal_slot_t                                    slot_watchdog;
