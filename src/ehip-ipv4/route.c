@@ -138,14 +138,15 @@ static void ipv4_route_make_temp_local_host_route(ipv4_addr_t dst_addr, const eh
 
 
 enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_t *dst_netdev_or_null, 
-    struct route_info *route, ipv4_addr_t *best_src_addr){
+    struct route_info *route, ipv4_addr_t *best_src_addr_ptr){
     struct route_table_entry *pos;
     struct route_table_entry *best = NULL;
     uint32_t match_level = 0;               /* match level 越高则匹配优先级越高 */
     uint32_t match_level_tmp = 0;           /* match level 越高则匹配优先级越高 */
     int ip_idx;
     struct ipv4_netdev* ipv4_dev = NULL;
-    enum route_table_type multicast_or_unicast;
+    enum route_table_type ret;
+    ipv4_addr_t best_src_addr = IPV4_ADDR_ANY;
 
     if(dst_netdev_or_null){
         ipv4_dev = ehip_netdev_trait_ipv4_dev((ehip_netdev_t *)dst_netdev_or_null);
@@ -154,48 +155,55 @@ enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_
     }
 
     if(ipv4_is_global_bcast(dst_addr) || ipv4_is_zeronet(dst_addr)){
-        if(ipv4_dev){
-            ipv4_route_make_temp_local_host_route(IPV4_ADDR_BROADCAST, dst_netdev_or_null, route);
-            if(best_src_addr)
-                *best_src_addr = ipv4_netdev_get_addr(ipv4_dev);
-            return ROUTE_TABLE_BROADCAST;
-        }
-        return ROUTE_TABLE_UNREACHABLE;
+        if(ipv4_dev == NULL)
+            return ROUTE_TABLE_UNREACHABLE;
+        ipv4_route_make_temp_local_host_route(IPV4_ADDR_BROADCAST, dst_netdev_or_null, route);
+        ret = ROUTE_TABLE_BROADCAST;
+        goto quick_check;
+        
     }
 
     if(ipv4_is_local_multicast(dst_addr)){
-        /* 局域网多播地址 */
-        if(ipv4_dev){
-            ipv4_route_make_temp_local_host_route(dst_addr, dst_netdev_or_null, route);
-            if(best_src_addr)
-                *best_src_addr = ipv4_netdev_get_addr(ipv4_dev);
-            return ROUTE_TABLE_MULTICAST;
-        }
-        return ROUTE_TABLE_UNREACHABLE;
+        if(ipv4_dev == NULL)
+            return ROUTE_TABLE_UNREACHABLE;
+        ipv4_route_make_temp_local_host_route(dst_addr, dst_netdev_or_null, route);
+        ret = ROUTE_TABLE_MULTICAST;
+        goto quick_check;
     }
 
 
     if(ipv4_dev){
         if(ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, dst_addr)){
             ipv4_route_make_temp_local_host_route(dst_addr, dst_netdev_or_null, route);
-            if(best_src_addr)
-                *best_src_addr = dst_addr;
-            return ROUTE_TABLE_LOCAL_SELF;
+            if(best_src_addr_ptr == NULL)
+                return ROUTE_TABLE_LOCAL_SELF;
+            if(*best_src_addr_ptr == IPV4_ADDR_ANY){
+                /* 如果没有指定源地址，则使用目标地址 */
+                *best_src_addr_ptr = dst_addr;
+                return ROUTE_TABLE_LOCAL_SELF;
+            }
+            /* 指定了源地址 */
+            ret = ROUTE_TABLE_LOCAL_SELF;
+            best_src_addr = *best_src_addr_ptr;
+            goto strict_check;
         }
-    }else{
-        /* 寻找一下是否存在某个IPV4设备拥有这个地址 */
-        ipv4_dev = ipv4_find_netdev_from_ipv4(dst_addr);
-        if(!ipv4_dev)
-            goto find_route;
+    }else if((ipv4_dev = ipv4_find_netdev_from_ipv4(dst_addr)) != NULL){
+        /* 某个IPV4设备拥有这个地址 */
         ipv4_route_make_temp_local_host_route(dst_addr, ipv4_get_parent_netdev(ipv4_dev), route);
-        if(best_src_addr)
-            *best_src_addr = dst_addr;
-        return ROUTE_TABLE_LOCAL;
+        if(best_src_addr_ptr == NULL)
+            return ROUTE_TABLE_LOCAL;
+        if(*best_src_addr_ptr == IPV4_ADDR_ANY){
+            /* 如果没有指定源地址，则使用目标地址 */
+            *best_src_addr_ptr = dst_addr;
+            return ROUTE_TABLE_LOCAL;
+        }
+        /* 指定了源地址 */
+        ret =  ROUTE_TABLE_LOCAL;
+        best_src_addr = *best_src_addr_ptr;
+        goto strict_check;
     }
 
-find_route:
     /* 如果设计了哈希表，先查哈希表，没有就遍历路由表 TODO */
-
     eh_list_for_each_entry(pos, &route_head, node){
         match_level_tmp = ehip_ipv4_route_entry_match_level(dst_addr, pos, dst_netdev_or_null);
         if(match_level_tmp > match_level){
@@ -211,38 +219,52 @@ find_route:
     if( ipv4_dev == NULL )
         ipv4_dev = ehip_netdev_trait_ipv4_dev(route->netdev);
 
-    multicast_or_unicast = ipv4_is_multicast(dst_addr) ? ROUTE_TABLE_MULTICAST : ROUTE_TABLE_UNICAST;
+    ret = ipv4_is_multicast(dst_addr) ? ROUTE_TABLE_MULTICAST : ROUTE_TABLE_UNICAST;
     if(route->gateway != IPV4_ADDR_ANY){
         /* 如果是有网关 */
-
-        if(route->src_addr != IPV4_ADDR_ANY){
-            if(best_src_addr)
-                *best_src_addr = route->src_addr;
-            return ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, route->src_addr) ? 
-                multicast_or_unicast : ROUTE_TABLE_UNREACHABLE;
-        }
-        
-        ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, route->gateway);
-        if(ip_idx < 0)
-            return ROUTE_TABLE_UNREACHABLE;
-        if(best_src_addr)
-            *best_src_addr = ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, ip_idx);;
-        return multicast_or_unicast;
+        dst_addr = route->gateway;
     }
 
-    /* 如果是直连路由，则需要检查是否是广播地址，顺便得到最合适的源ip */
-    if(route->src_addr == IPV4_ADDR_ANY){
+    if(best_src_addr_ptr && *best_src_addr_ptr != IPV4_ADDR_ANY){
+        /* 如果指定了源地址 */
+        best_src_addr = *best_src_addr_ptr;
+    }else{
+        best_src_addr = route->src_addr;
+    }
+
+strict_check:
+    /*  
+     * 进行较为严格的检查，这里需要best_src_addr的有效性，是否与目标地址在同一网段
+     */
+
+    if(best_src_addr == IPV4_ADDR_ANY){
+        /* 找出一个相对合适的源地址 */
         ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, dst_addr);
     }else{
-        ip_idx = ipv4_netdev_get_ipv4_addr_idx(ipv4_dev, route->src_addr);
+        ip_idx = ipv4_netdev_get_ipv4_addr_idx(ipv4_dev, best_src_addr);
+        if(ip_idx < 0 || !ipv4_is_same_subnet(best_src_addr, dst_addr, ipv4_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, ip_idx)))
+            ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, dst_addr);
     }
+
     if(ip_idx < 0)
         return ROUTE_TABLE_UNREACHABLE;
 
-    if(best_src_addr)
-        *best_src_addr = ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, ip_idx);
-    return ipv4_is_local_broadcast(dst_addr, ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, ip_idx)) ? 
-        ROUTE_TABLE_BROADCAST : multicast_or_unicast;
+    best_src_addr = ipv4_netdev_get_ipv4_addr_by_idx(ipv4_dev, ip_idx);
+
+    if(best_src_addr_ptr)
+        *best_src_addr_ptr = best_src_addr;
+
+    return ipv4_is_local_broadcast(dst_addr, ipv4_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, ip_idx)) ? 
+        ROUTE_TABLE_BROADCAST : ret;
+quick_check:
+    if(best_src_addr_ptr == NULL)
+        return ret;
+    if(*best_src_addr_ptr == IPV4_ADDR_ANY || !ipv4_netdev_is_ipv4_addr_valid(ipv4_dev, *best_src_addr_ptr)){
+        /* 如果没有指定源地址或者地址无效，则使用本地网卡的地址 */
+        *best_src_addr_ptr = ipv4_netdev_get_addr(ipv4_dev);
+        return ret;
+    }
+    return ret;
 }
 
 

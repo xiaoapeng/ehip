@@ -101,19 +101,14 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     uint8_t *write_ptr;
     ehip_netdev_t *netdev;
     struct route_info  out_route;
-    ipv4_addr_t  best_src_addr;
+    ipv4_addr_t  best_src_addr = ip_msg->ip_hdr.dst_addr;
 
     /* 准备回复 */
     netdev = ip_message_get_netdev(ip_msg);
     /* 查路由表，找到最佳路径 */
     route_type = ipv4_route_lookup(ip_msg->ip_hdr.src_addr, netdev, &out_route, &best_src_addr);
-    if(route_type != ROUTE_TABLE_UNICAST && route_type != ROUTE_TABLE_LOCAL_SELF){
+    if( (route_type != ROUTE_TABLE_UNICAST && route_type != ROUTE_TABLE_LOCAL_SELF) || best_src_addr != ip_msg->ip_hdr.dst_addr){
         goto unreachable_target;
-    }
-
-    if(!ipv4_netdev_is_local_broadcast(ehip_netdev_trait_ipv4_dev(netdev), ip_msg->ip_hdr.dst_addr) && !ipv4_is_global_bcast(ip_msg->ip_hdr.dst_addr)){
-        /* 目的地址不是本地广播地址 */
-        best_src_addr = ip_msg->ip_hdr.dst_addr;
     }
 
     /* 生成回复的 ip报文,header_reserved_size将设置为0，因为下面会将icmp头部当作数据的一部分来处理 */

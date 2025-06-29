@@ -74,7 +74,8 @@ extern int ipv4_route_to_array(struct route_info **route_array);
  * @param  dst_addr             目标地址
  * @param  dst_netdev_or_null   目标网卡，如果为NULL则可以匹配任意网卡
  * @param  route                路由表项信息
- * @param  best_src_addr        建议的最佳源地址
+ * @param  best_src_addr        建议的最佳源地址 当传入的best_src_addr有效且 *best_src_addr != IPV4_ADDR_ANY 时，
+ *                              将尝试使用该地址作为源地址，若该地址无效则使用其他可用源地址
  * @return int                  成功返回  ROUTE_TABLE_XXX
  */
 extern enum route_table_type ipv4_route_lookup(ipv4_addr_t dst_addr, const ehip_netdev_t *dst_netdev_or_null, 

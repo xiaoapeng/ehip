@@ -28,7 +28,7 @@ int ehip_route_refresh(ehip_netdev_t **dev_ptr, ipv4_addr_t *src_addr_ptr, ipv4_
          ipv4_route_table_is_changed(*last_route_trait_value)){
         /* 重新路由 */
         struct route_info route;
-        ipv4_addr_t best_src_addr;
+        ipv4_addr_t best_src_addr = src_addr;
 
         *route_type_ptr = route_type = ipv4_route_lookup(dst_addr, dev, &route, &best_src_addr);
         *last_route_trait_value = ipv4_route_table_get_trait_value();
