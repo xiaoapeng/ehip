@@ -170,6 +170,13 @@ static inline bool ipv4_is_local_multicast(ipv4_addr_t addr)
     return (addr & eh_hton32(0xffffff00)) == eh_hton32(0xe0000000);
 }
 
+
+static inline bool ipv4_is_same_subnet(ipv4_addr_t addr1, ipv4_addr_t addr2, uint8_t mask_len)
+{
+    uint32_t mask = ipv4_mask_len_to_mask(mask_len);
+    return (addr1 & mask) == (addr2 & mask);
+}
+
 static inline bool ipv4_is_global_bcast(ipv4_addr_t addr)
 {
     /* limited broadcast */
@@ -279,12 +286,12 @@ extern int ipv4_netdev_get_best_ipv4_addr_idx(const struct ipv4_netdev* ipv4_dev
 /**
  * @brief                       通过索引获取接口的网络地址
  */
-#define ipve_netdev_get_ipv4_addr_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_addr[idx])
+#define ipv4_netdev_get_ipv4_addr_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_addr[idx])
 
 /**
  * @brief                       通过索引获取接口的网络地址掩码长度
  */
-#define ipve_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_mask_len[idx])
+#define ipv4_netdev_get_ipv4_addr_mask_len_by_idx(ipv4_dev, idx) ((ipv4_dev)->ipv4_mask_len[idx])
 
 /**
  * @brief                       通过地址获取接口的网络地址索引
