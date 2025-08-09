@@ -150,4 +150,9 @@
 #define EHIP_ARP_QUERY_MEM_POOL_NUM                             8U
 #endif
 
+#ifndef EHIP_TCP_FRAGMENT_SEGMENT_MAX_NUM
+#define EHIP_TCP_FRAGMENT_SEGMENT_MAX_NUM                       9U
+#endif  
+
+
 #endif // _EHIP_CONF_H_

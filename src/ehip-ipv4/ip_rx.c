@@ -95,7 +95,7 @@ static struct ip_message * ip_reasse(ehip_buffer_t *buffer, const struct ip_hdr 
         eh_mdebugln( IP_REASSE, "first fragment!");
         ip_msg = ip_message_rx_new_fragment(buffer->netdev, buffer, ip_hdr, route_type);
         if(eh_ptr_to_error(ip_msg) < 0){
-            eh_mdebugln( IP_REASSE, "ip_message_rx_new_fragment error ret = %d!", ret);
+            eh_mdebugln( IP_REASSE, "ip_message_rx_new_fragment error ret = %d!", eh_ptr_to_error(ip_msg));
             return NULL;
         }
         ip_fragment_reasse_tab[index] = ip_msg;
@@ -259,7 +259,7 @@ static void ip_handle(struct ehip_buffer* buf){
         case IP_PROTO_ICMP:{
             extern void icmp_input(struct ip_message *ip_msg);
             icmp_input(ip_message);
-            return ;
+            break;
         }
         case IP_PROTO_IGMP:
             ip_message_free(ip_message);
@@ -268,11 +268,13 @@ static void ip_handle(struct ehip_buffer* buf){
         case IP_PROTO_UDPLITE:{
             extern void udp_input(struct ip_message *ip_msg);
             udp_input(ip_message);
-            return ;
-        }
-        case IP_PROTO_TCP:
-            ip_message_free(ip_message);
             break;
+        }
+        case IP_PROTO_TCP:{
+            extern void tcp_input(struct ip_message *ip_msg);
+            tcp_input(ip_message);
+            break;
+        }
     }
     return ;
 drop:
