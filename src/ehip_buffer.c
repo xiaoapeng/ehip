@@ -55,12 +55,11 @@ static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_s
         goto eh_mem_pool_alloc_buffer_ref_fail;
     }
     
-    buf_ref->buffer = buffer_raw_ptr;
     buf->buffer_ref = buf_ref;
     buf->payload_pos = head_reserved_size_or_0;
     buf->payload_tail = head_reserved_size_or_0;
     buf->flags = 0;
-    buf_ref->buffer = buf_ref->buffer;
+    buf_ref->buffer = buffer_raw_ptr;
     buf_ref->ref_cnt = 1;
     buf_ref->type = type;
     buf_ref->buffer_size = ehip_pool_info_tab[type].size;
