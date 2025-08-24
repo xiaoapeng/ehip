@@ -1689,8 +1689,7 @@ static void tcp_syn_recv_or_established_recv_dispose(struct tcp_pcb *pcb, struct
         tcp_client_events_callback(pcb, TCP_RECV_FIN);
         /* 检查是否还有未发送的数据，若没有，则准备发送fin进入LAST ACK 状态 */
         if(pcb->snd_nxt == pcb->snd_una && pcb->user_req_transmit == 0){
-            // eh_mdebugfl(TCP_INPUT, "tcp syn recv or established state, snd_nxt == snd_una, migrate to TCP_STATE_LAST_ACK");
-            eh_debugfl("tcp syn recv or established state, snd_nxt == snd_una, migrate to TCP_STATE_LAST_ACK");
+            eh_mdebugfl(TCP_INPUT, "tcp syn recv or established state, snd_nxt == snd_una, migrate to TCP_STATE_LAST_ACK");
             tcp_transmit_ctrl(pcb, TCP_FLAG_FIN|TCP_FLAG_ACK, pcb->snd_nxt);
             pcb->need_ack = 0;
             pcb->snd_nxt++;
@@ -1765,7 +1764,6 @@ static void tcp_last_ack_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_
     }
 
     if(ret){
-        eh_debugfl("debug to TCP_STATE_CLOSED");
         tcp_interior_try_close(pcb, TCP_DISCONNECTED);
     }
 
@@ -1956,11 +1954,11 @@ void tcp_input(struct ip_message *ip_msg){
     tcp_data_len = ehip_buffer_get_payload_size(tcp_msg);
     if(tcp_data_len < sizeof(struct tcp_hdr) || tcp_data_len < tcp_hdr_size(tcp_hdr)){
         eh_mwarnfl(TCP_INPUT, "tcp msg too small %d", tcp_data_len);
-        goto drop;
+        goto checksum_error;
     }
     if(tcp_hdr->doff < 5){
         eh_mwarnfl(TCP_INPUT, "tcp msg doff %d invalid", tcp_hdr->doff);
-        goto drop;
+        goto checksum_error;
     }
     pseudo_hdr.src_addr = ip_msg->ip_hdr.src_addr;
     pseudo_hdr.dst_addr = ip_msg->ip_hdr.dst_addr;
