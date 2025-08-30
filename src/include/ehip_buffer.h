@@ -15,6 +15,7 @@
 #include <stdint.h>
 
 #include <eh_types.h>
+#include <eh_mem_pool.h>
 #include <ehip_ptype.h>
 #include <ehip_buffer_type.h>
 
@@ -100,6 +101,12 @@ struct ehip_buffer{
 #define ehip_buffer_get_payload_end_ptr(buf) (ehip_buffer_get_buffer_ptr(buf) + (buf)->payload_tail)
 
 
+/**
+ * @brief                   获取该buffer类型的内存池句柄
+ * @param  type             My Param doc
+ * @return eh_mem_pool_t 
+ */
+extern eh_mem_pool_t ehip_buffer_type_mem_pool(enum ehip_buffer_type type);
 
 /**
  * @brief                   向 tpye内存池获取一个裸指针内存块

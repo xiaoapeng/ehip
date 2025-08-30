@@ -69,6 +69,10 @@ eh_mem_pool_alloc_buffer_ref_fail:
     return eh_error_to_ptr(ret);;
 }
 
+eh_mem_pool_t ehip_buffer_type_mem_pool(enum ehip_buffer_type type){
+    return pool_tab[type];
+}
+
 ehip_buffer_raw_ptr ehip_buffer_new_raw_ptr(enum ehip_buffer_type type){
     if((uint32_t)type >= EHIP_BUFFER_TYPE_MAX)
         return NULL;
