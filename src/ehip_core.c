@@ -39,8 +39,8 @@ EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_500ms, eh_event_timer_t,  EH_TIMER_INI
 EH_DEFINE_CUSTOM_SIGNAL(signal_ehip_timer_100ms, eh_event_timer_t,  EH_TIMER_INIT(signal_ehip_timer_100ms.custom_event));
 
 static void  slot_function_mbox_rx(eh_event_t *e, void *slot_param){
-    (void)e;
     (void)slot_param;
+    uint32_t process_num = 0;
     struct ehip_mbox_msg_base *mbox_msg_base;
     struct eh_llist_node *pos;
     while((pos = eh_llist_dequeue(&mbox_rx))){
@@ -53,12 +53,17 @@ static void  slot_function_mbox_rx(eh_event_t *e, void *slot_param){
             }
         }
         eh_mem_pool_free(pool_mbox_msg_rx, mbox_msg_base);
+        process_num++;
+        if(process_num >= EHIP_MAX_PACKET_PROCESS_NUM){
+            eh_signal_notify(eh_signal_from_event(e));
+            break;
+        }
     }
 }
 static EH_DEFINE_SLOT(slot_mbox_rx, slot_function_mbox_rx, NULL);
 
 static void slot_function_start_xmit(eh_event_t *e, void *slot_param){
-    (void)e;
+    uint32_t process_num = 0;
     ehip_netdev_t *netdev = slot_param;
     struct eh_llist_node *pos;
     struct ehip_tx_msg *tx_msg;
@@ -79,6 +84,11 @@ static void slot_function_start_xmit(eh_event_t *e, void *slot_param){
         eh_llist_dequeue(&netdev->tx_queue);
         ehip_buffer_free(tx_msg->netdev_buf);
         eh_mem_pool_free(pool_queue_entry_tx, tx_msg);
+        process_num++;
+        if(process_num >= EHIP_MAX_PACKET_PROCESS_NUM){
+            eh_signal_notify(eh_signal_from_event(e));
+            break;
+        }
     }
     eh_event_flags_clear_bits_change_notify(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_TX_BUSY);
     eh_timer_stop(eh_signal_to_custom_event(&netdev->signal_watchdog));

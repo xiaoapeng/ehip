@@ -154,5 +154,10 @@
 #define EHIP_TCP_FRAGMENT_SEGMENT_MAX_NUM                       9U
 #endif  
 
+/* 单次处理RX TX数据包的最大数量 */
+#ifndef EHIP_MAX_PACKET_PROCESS_NUM
+#define EHIP_MAX_PACKET_PROCESS_NUM                             4U
+#endif
+
 
 #endif // _EHIP_CONF_H_
