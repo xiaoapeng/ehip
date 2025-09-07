@@ -68,7 +68,7 @@ static void slot_function_arp_changed(eh_event_t *e, void *param){
                 payload_len = 0;
             }
 
-            ip_raw_error(ip_msg->ip_hdr.src_addr, &ip_msg->ip_hdr, payload, payload_len, EHIP_RET_UNREACHABLE);
+            ip_raw_error(ip_msg->ip_hdr.src_addr, NULL, &ip_msg->ip_hdr, payload, payload_len, EHIP_RET_UNREACHABLE);
             ip_message_free(ip_msg);
             eh_mem_pool_free(arp_query_pool, ptr);
         }

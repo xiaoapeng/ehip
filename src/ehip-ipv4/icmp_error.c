@@ -120,7 +120,12 @@ void icmp_error_input(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr
     }
     
     /* 传递错误到上层 */
-    ip_raw_error(ip_msg->ip_hdr.src_addr, err_ip_hdr, icmp_error_payload, icmp_error_payload_len, error);
+    ip_raw_error(ip_msg->ip_hdr.src_addr,
+        ip_message_get_netdev(ip_msg),
+        err_ip_hdr,
+        icmp_error_payload, 
+        icmp_error_payload_len, 
+        error);
 
 drop:
     ip_message_free(ip_msg);

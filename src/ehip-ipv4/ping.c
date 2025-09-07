@@ -267,7 +267,8 @@ void ping_input(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr){
     return ;
 }
 
-void ping_error_input(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
+void ping_error_input(ipv4_addr_t err_sender, ehip_netdev_t* netdev, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
+    (void) netdev;
     const struct icmp_hdr *icmp_hdr;
     uint16_t id;
     struct ping_pcb *pcb;

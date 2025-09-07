@@ -32,7 +32,7 @@ struct __packed icmp_hdr {
             * 若是被ping，则需要在回显报文中复制该值
             * sequence值，用于标识报文序号，在回显时需要复制该值 
             */
-            uint16_be_t    id;    
+            uint16_be_t    id;
             uint16_be_t    sequence;
         }echo;
         struct {

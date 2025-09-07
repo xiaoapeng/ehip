@@ -9,20 +9,21 @@
  */
 
 #include <ehip-ipv4/ip_raw_error.h>
+#include <ehip_netdev.h>
 
 
 
-void ip_raw_error(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
+void ip_raw_error(ipv4_addr_t err_sender, ehip_netdev_t* netdev, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error){
     switch (ip_hdr->protocol) {
         case IP_PROTO_ICMP:{
-            extern void ping_error_input(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error);
-            ping_error_input(err_sender, ip_hdr, payload, payload_len, error);
+            extern void ping_error_input(ipv4_addr_t err_sender, ehip_netdev_t* netdev, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error);
+            ping_error_input(err_sender, netdev, ip_hdr, payload, payload_len, error);
             break;
         }
         case IP_PROTO_UDP:
         case IP_PROTO_UDPLITE:{
-            extern void udp_error_input(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error);
-            udp_error_input(err_sender, ip_hdr, payload, payload_len, error);
+            extern void udp_error_input(ipv4_addr_t err_sender, ehip_netdev_t* netdev, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error);
+            udp_error_input(err_sender, netdev, ip_hdr, payload, payload_len, error);
             break;
         }
         default:

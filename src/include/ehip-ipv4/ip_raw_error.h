@@ -18,7 +18,7 @@ extern "C"{
 #endif
 #endif /* __cplusplus */
 
-extern void ip_raw_error(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error);
+extern void ip_raw_error(ipv4_addr_t err_sender, ehip_netdev_t* netdev, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error);
 
 
 #ifdef __cplusplus
