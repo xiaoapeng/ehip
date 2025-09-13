@@ -60,13 +60,14 @@
 #define TCP_INIT_RTO                       200
 #define TCP_MAX_RTO                        (1000 * 60)
 #define TCP_MIN_RTO                        (200)
+#define TCP_LAN_MIN_RTO                    (8)
 #define TCP_MAX_RTT                        (1000 * 30)
 #define TCP_INIT_SSTHRESH                  8
 
 
 #define TCP_PCB_PRIVATE_FLAGS_ANY           0x00000001U
 #define TCP_PCB_PRIVATE_FLAGS_AUTO_PORT     0x00000002U
-#define TCP_PCB_PRIVATE_FLAGS_USER_CLOSED    0x00000004U
+#define TCP_PCB_PRIVATE_FLAGS_USER_CLOSED   0x00000004U
 #define TCP_PCB_PRIVATE_FLAGS_BIT_WIDTH     16
 
 
@@ -430,18 +431,17 @@ static void slot_function_timer_timeout(eh_event_t *e, void *arg){
 static void slot_function_timer_rto(eh_event_t *e, void *arg){
     (void)e;
     struct tcp_pcb *pcb = (struct tcp_pcb *)arg;
-
+    int rto_tmp;
     if(pcb->snd_nxt == pcb->snd_una)
         return ;
 
     eh_mdebugfl(TCP_RTO_TIMEOUT, "snd_una:%u snd_nxt:%u rto:%u", pcb->snd_una, pcb->snd_nxt, pcb->rto);
-
+    rto_tmp = pcb->rto;
     if(pcb->retransmit == 0){
         pcb->ssthresh = pcb->cwnd/2;
         if(pcb->ssthresh < (pcb->mss << 1))
             pcb->ssthresh = pcb->mss * 2;
         pcb->cwnd = 1;
-        pcb->rto = TCP_INIT_RTO;
     }else{
         if(pcb->rto == TCP_MAX_RTO){
             /* 超时 */
@@ -449,12 +449,15 @@ static void slot_function_timer_rto(eh_event_t *e, void *arg){
             tcp_interior_try_close(pcb, TCP_SEND_TIMEOUT);
             return ;
         }
-        if(pcb->rto << 1 > TCP_MAX_RTO){
-            pcb->rto = TCP_MAX_RTO;
-        }else{
-            pcb->rto = (uint16_t)(pcb->rto << 1);
-        }
     }
+
+    rto_tmp = rto_tmp << 1;
+    if( rto_tmp > TCP_MAX_RTO){
+        pcb->rto = TCP_MAX_RTO;
+    }else{
+        pcb->rto = (uint16_t)rto_tmp;
+    }
+
     ehip_tcp_client_enter_retransmit(pcb);
     ehip_tcp_client_data_send(pcb);
 }
@@ -961,6 +964,7 @@ static int tcp_recv_ack(struct tcp_pcb *pcb, struct tcp_recv_pack_info *pack_inf
 static void tcp_update_srtt(struct tcp_pcb *pcb){
     uint16_t now = (uint16_t)eh_clock_to_msec(eh_get_clock_monotonic_time());
     uint16_t rtt = now - pcb->departure_time;
+    int rto_tmp;
     if(rtt > TCP_MAX_RTT)
         return;
     if(rtt == 0)
@@ -980,12 +984,15 @@ static void tcp_update_srtt(struct tcp_pcb *pcb){
             var = -var;
         pcb->mdev += (uint16_t)(var >> 2);
     }
-
-    pcb->rto = (uint16_t)(pcb->srtt + (pcb->mdev << 2));
-    if(pcb->rto > TCP_MAX_RTO)
+    rto_tmp = (uint16_t)(pcb->srtt + (pcb->mdev << 2));
+    if(rto_tmp > TCP_MAX_RTO){
         pcb->rto = TCP_MAX_RTO;
-    if(pcb->rto < TCP_MIN_RTO)
-        pcb->rto = TCP_MIN_RTO;
+    }else if(rto_tmp < TCP_MIN_RTO){
+        pcb->rto = rto_tmp < TCP_LAN_MIN_RTO ? TCP_LAN_MIN_RTO : TCP_MIN_RTO;
+    }else{
+        pcb->rto = (uint16_t)rto_tmp;
+    }
+
 
 }
 
