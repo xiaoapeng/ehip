@@ -439,8 +439,8 @@ static void slot_function_timer_rto(eh_event_t *e, void *arg){
     rto_tmp = pcb->rto;
     if(pcb->retransmit == 0){
         pcb->ssthresh = pcb->cwnd/2;
-        if(pcb->ssthresh < (pcb->mss << 1))
-            pcb->ssthresh = pcb->mss * 2;
+        if(pcb->ssthresh < 2)
+            pcb->ssthresh = 2;
         pcb->cwnd = 1;
     }else{
         if(pcb->rto == TCP_MAX_RTO){
