@@ -50,11 +50,11 @@
 #define TCP_TIMEOUT_RETRANSMIT_FIN_SIGNAL   ((eh_signal_base_t *)(&signal_ehip_timer_500ms))
 
 #define TCP_TIMEOUT_DELAY_ACK_DOWNCNT       1 /* 0ms-100ms之间 */
-#define TCP_TIMEOUT_DELAY_ACK_RETRY         1
+#define TCP_TIMEOUT_DELAY_ACK_RETRY         0
 #define TCP_TIMEOUT_DELAY_ACK_SIGNAL         ((eh_signal_base_t *)(&signal_ehip_timer_100ms))
 
 #define TCP_TIMEOUT_TIME_WAIT_DOWNCNT       120
-#define TCP_TIMEOUT_TIME_WAIT_RETRY         1
+#define TCP_TIMEOUT_TIME_WAIT_RETRY         0
 #define TCP_TIMEOUT_TIME_WAIT_SIGNAL        ((eh_signal_base_t *)(&signal_ehip_timer_1s))
 
 #define TCP_DELAY_ACK_TIMEOUT              200      /* 延迟ACK超时 x ms */
@@ -438,9 +438,6 @@ static void slot_function_timer_timeout(eh_event_t *e, void *arg){
             /*  重传 FIN */
             pcb->timeout_reload = pcb->timeout_countdown = pcb->timeout_reload * 2;
             tcp_transmit_ctrl(pcb, TCP_FLAG_FIN|TCP_FLAG_ACK, pcb->snd_una);
-            break;
-        case TCP_STATE_ESTABLISHED:
-            pcb->timeout_reload = pcb->timeout_countdown = pcb->timeout_reload * 2;
             break;
         default:
             tcp_stop_simple_timer(pcb);
@@ -1680,7 +1677,7 @@ static bool tcp_close(struct tcp_pcb *pcb, bool is_user_close){
     }
     
     key = (struct tcp_hash_key*)eh_hashtbl_node_key(pcb->node);
-    eh_mdebugfl(TCP_CLOSE, IPV4_FORMATIO":%d <->"IPV4_FORMATIO"%d close....", 
+    eh_mdebugfl(TCP_CLOSE, IPV4_FORMATIO":%d <->"IPV4_FORMATIO":%d close....", 
             ipv4_formatio(key->local_addr), eh_ntoh16(key->local_port),
             ipv4_formatio(key->remote_addr), eh_ntoh16(key->remote_port));
     eh_signal_slot_disconnect(&pcb->slot_timer_timeout);
@@ -2188,6 +2185,7 @@ static void tcp_close_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pac
     }
 
     if(tcp_pcb_is_tx_channel_idle(pcb)){
+        tcp_close_tx(pcb);
         tcp_client_send_fin(pcb, TCP_STATE_LAST_ACK);
         pcb->need_ack = 0;
     }
@@ -2548,6 +2546,7 @@ int ehip_tcp_client_disconnect(tcp_pcb_t _pcb){
     pcb->user_req_disconnect = 1;
     if(!tcp_pcb_is_tx_channel_idle(pcb))
         return 0;
+    tcp_close_tx(pcb);
     tcp_client_send_fin(pcb, TCP_STATE_FIN_WAIT_1);
     return 0;
 }
