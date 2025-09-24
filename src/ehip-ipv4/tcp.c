@@ -2078,6 +2078,7 @@ static void tcp_fin_wait_1_or_2_recv_dispose(struct tcp_pcb *pcb, struct tcp_rec
         }else if( recv_pack_info->recv_flags & TCP_RECV_DATA_RET_FIN ){
             /* 收到FIN ---> 进入 TCP_STATE_CLOSING 状态 */
             pcb->state = TCP_STATE_CLOSING;
+            tcp_client_events_callback(pcb, TCP_DISCONNECTED);
             tcp_close_rx(pcb);
             tcp_stop_simple_timer(pcb);
             tcp_start_simple_timer(pcb, TCP_TIMEOUT_RETRANSMIT_FIN_SIGNAL, TCP_TIMEOUT_RETRANSMIT_FIN_DOWNCNT, TCP_TIMEOUT_RETRANSMIT_FIN_RETRY);
