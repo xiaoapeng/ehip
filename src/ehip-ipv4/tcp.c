@@ -100,7 +100,6 @@ enum TCP_STATE{
 #define tcp_pcb_is_tx_channel_idle(pcb)         ((pcb)->snd_nxt == (pcb)->snd_una && (pcb)->user_req_transmit == 0)
 
 
-
 static eh_hashtbl_t         tcp_hash_tbl;
 static uint16_t             tcp_bind_port = 0x8000;
 struct tcp_base_opt{
@@ -626,7 +625,7 @@ static void tcp_hdr_fill(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint8_t optio
     hdr->flags = 0;
     hdr->flags |= hdr_flags;
     hdr->doff = ((unsigned int)(eh_align_up(option_len, 4) >> 2) + (unsigned int)(sizeof(struct tcp_hdr) >> 2)) & 0x0F;
-    hdr->window = eh_hton16((uint16_t)eh_ringbuf_free_size(pcb->rx_buf));
+    hdr->window = pcb->rx_buf ? eh_hton16((uint16_t)eh_ringbuf_free_size(pcb->rx_buf)) : 0;
     hdr->check = 0;
     hdr->urg_ptr = 0;
 }
@@ -1024,13 +1023,12 @@ static int tcp_recv_rst(struct tcp_pcb *pcb, struct tcp_recv_pack_info *pack_inf
     if(pack_info->hdr->rst == 0)
         return TCP_RECV_RST_RET_NO_RECV;
     seq = eh_ntoh32(pack_info->hdr->seq);
-    if(pcb->rcv_nxt == seq){
+    if(pcb->rcv_nxt == seq || pcb->rx_buf == NULL){
         return TCP_RECV_RST_RET_RECV;
     }
     /* 如果有数据，那就直接丢弃该报文 */
     if(pack_info->data_len > 0)
         return TCP_RECV_RST_RET_DROP;
-
     /* 如果在窗口内，那么应该回一个ACK，否则也应该丢弃 */
     win_limit = pcb->rcv_nxt + (uint32_t)eh_ringbuf_free_size(pcb->rx_buf);
     if(tcp_seq_check(pcb->rcv_nxt, win_limit + 1, seq)){
@@ -1877,6 +1875,12 @@ static void tcp_client_recv_data_auto_ack(struct tcp_pcb *pcb, struct tcp_recv_p
     }
 }
 
+static inline bool tcp_client_later_recv_is_fin(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
+    const struct tcp_hdr *hdr;
+    hdr = recv_pack_info->hdr;
+    return recv_pack_info->hdr->fin && (eh_ntoh32(hdr->seq) + recv_pack_info->data_len) == (pcb->rcv_nxt - 1);
+}
+
 static void tcp_closed_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     (void)pcb;
     (void)recv_pack_info;
@@ -2108,7 +2112,6 @@ drop:
 
 static void tcp_closing_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     int ret;
-    const struct tcp_hdr *hdr;
     
     ret = tcp_common_recv_pre_dispose(pcb, recv_pack_info);
     switch (ret) {
@@ -2121,8 +2124,7 @@ static void tcp_closing_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_i
             break;
     }
 
-    hdr = recv_pack_info->hdr;
-    if(recv_pack_info->hdr->fin && (hdr->seq + recv_pack_info->data_len) == pcb->snd_nxt - 1)
+    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
         tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
     if(ret > 0){
         /* 收到ACK ---> 进入 TCP_STATE_TIME_WAIT 状态  */
@@ -2138,7 +2140,6 @@ drop:
 
 static void tcp_time_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     int ret;
-    const struct tcp_hdr *hdr;
     ret = tcp_common_recv_pre_dispose(pcb, recv_pack_info);
     switch (ret) {
         case TCP_COMMON_RECV_PRE_RET_QUIT:
@@ -2149,8 +2150,7 @@ static void tcp_time_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack
         default:
             break;
     }
-    hdr = recv_pack_info->hdr;
-    if(recv_pack_info->hdr->fin && (hdr->seq + recv_pack_info->data_len) == pcb->snd_nxt - 1)
+    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
         tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
 
 quit:
@@ -2161,7 +2161,6 @@ drop:
 
 static void tcp_close_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     int ret;
-    const struct tcp_hdr *hdr;
     
     ret = tcp_common_recv_pre_dispose(pcb, recv_pack_info);
     switch (ret) {
@@ -2175,8 +2174,7 @@ static void tcp_close_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pac
             break;
     }
 
-    hdr = recv_pack_info->hdr;
-    if(recv_pack_info->hdr->fin && (hdr->seq + recv_pack_info->data_len) == pcb->snd_nxt - 1)
+    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
         pcb->need_ack = 1;
 
     tcp_client_auto_send(pcb, recv_pack_info->opt_sack);
@@ -2197,7 +2195,6 @@ drop:
 
 static void tcp_last_ack_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     int ret;
-    const struct tcp_hdr *hdr;
     
     ret = tcp_common_recv_pre_dispose(pcb, recv_pack_info);
     switch (ret) {
@@ -2210,8 +2207,7 @@ static void tcp_last_ack_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_
             break;
     }
 
-    hdr = recv_pack_info->hdr;
-    if(recv_pack_info->hdr->fin && (hdr->seq + recv_pack_info->data_len) == pcb->snd_nxt - 1)
+    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
         tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
 
     if(ret){
