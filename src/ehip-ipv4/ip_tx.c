@@ -200,14 +200,18 @@ int __init ip_tx_init(void){
     ret = eh_ptr_to_error(arp_query_pool);
     if(ret < 0)
         return ret;
-    eh_signal_slot_connect(&signal_arp_table_changed, &slot_arp_table_changed);
+    ret = eh_signal_slot_connect(&signal_arp_table_changed, &slot_arp_table_changed);
+    if(ret < 0){
+        eh_mem_pool_destroy(arp_query_pool);
+        return ret;
+    }
     return 0;
 }
 
 void __exit ip_tx_exit(void){
     int i;
     struct arp_query_pcb *ptr;
-    eh_signal_slot_disconnect(&slot_arp_table_changed);
+    eh_signal_slot_disconnect(&signal_arp_table_changed, &slot_arp_table_changed);
     eh_mem_pool_for_each(i, arp_query_pool, ptr){
         if(eh_mem_pool_idx_is_used(arp_query_pool, i)){
             ip_message_free(((struct arp_query_pcb *)ptr)->ip_msg);

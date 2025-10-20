@@ -169,12 +169,11 @@ int  _ehip_core_netdev_init(ehip_netdev_t *netdev){
     int ret;
     eh_llist_head_init(&netdev->tx_queue);
     eh_signal_init(&netdev->signal_tx_wakeup);
-    ret = eh_signal_register(&netdev->signal_tx_wakeup);
-    if(ret < 0){
-        goto eh_signal_tx_wakeup_register_error;
-    }
     eh_signal_slot_init(&netdev->slot_tx_wakeup, slot_function_start_xmit, netdev);
-    eh_signal_slot_connect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
+    ret = eh_signal_slot_connect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
+    if(ret < 0){
+        goto eh_signal_slot_connect_error;
+    }
 
     eh_signal_init(&netdev->signal_watchdog);
     eh_timer_advanced_init(
@@ -183,30 +182,25 @@ int  _ehip_core_netdev_init(ehip_netdev_t *netdev){
         0
     );
 
-    ret = eh_signal_register(&netdev->signal_watchdog);
+    eh_signal_slot_init(&netdev->slot_watchdog, slot_function_watchdog_timeout, netdev);
+    ret = eh_signal_slot_connect(&netdev->signal_watchdog, &netdev->slot_watchdog);
     if(ret < 0){
-        goto eh_signal_watchdog_register_error;
+        goto eh_signal_watchdog_connect_error;
     }
 
-    eh_signal_slot_init(&netdev->slot_watchdog, slot_function_watchdog_timeout, netdev);
-    eh_signal_slot_connect(&netdev->signal_watchdog, &netdev->slot_watchdog);
-
     return 0;
-eh_signal_watchdog_register_error:
-    eh_signal_slot_disconnect(&netdev->slot_tx_wakeup);
-    eh_signal_unregister(&netdev->signal_tx_wakeup);
-eh_signal_tx_wakeup_register_error:
+eh_signal_watchdog_connect_error:
+    eh_signal_slot_disconnect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
+eh_signal_slot_connect_error:
     /* 无需调用 eh_signal_clean */
     return ret;
 }
 void _ehip_core_netdev_exit(ehip_netdev_t *netdev){
-    eh_signal_slot_disconnect(&netdev->slot_watchdog);
-    eh_signal_unregister(&netdev->signal_watchdog);
+    eh_signal_slot_disconnect(&netdev->signal_watchdog, &netdev->slot_watchdog);
     eh_timer_clean(eh_signal_to_custom_event(&netdev->signal_watchdog));
-    eh_signal_clean(&netdev->signal_watchdog);
-    eh_signal_slot_disconnect(&netdev->slot_tx_wakeup);
-    eh_signal_unregister(&netdev->signal_tx_wakeup);
-    eh_signal_clean(&netdev->signal_tx_wakeup);
+    eh_signal_slot_clean(&netdev->signal_watchdog);
+    eh_signal_slot_disconnect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
+    eh_signal_slot_clean(&netdev->signal_tx_wakeup);
 }
 
 int  _ehip_core_netdev_up(ehip_netdev_t *netdev){
@@ -242,8 +236,6 @@ static int __init ehip_core_init(void){
         eh_signal_to_custom_event(&signal_ehip_timer_1s), 
         (eh_sclock_t)eh_msec_to_clock(1000*1), 
         EH_TIMER_ATTR_AUTO_CIRCULATION);
-    ret = eh_signal_register(&signal_ehip_timer_1s);
-    if(ret < 0) return ret;
     ret = eh_timer_start(eh_signal_to_custom_event(&signal_ehip_timer_1s));
     if(ret < 0) goto eh_timer_1s_start_error;
 
@@ -251,8 +243,6 @@ static int __init ehip_core_init(void){
         eh_signal_to_custom_event(&signal_ehip_timer_500ms), 
         (eh_sclock_t)eh_msec_to_clock(100*5), 
         EH_TIMER_ATTR_AUTO_CIRCULATION);
-    ret = eh_signal_register(&signal_ehip_timer_500ms);
-    if(ret < 0) goto eh_signal_register_timer_500ms_error;
     ret = eh_timer_start(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
     if(ret < 0) goto eh_timer_500ms_start_error;
 
@@ -260,15 +250,12 @@ static int __init ehip_core_init(void){
         eh_signal_to_custom_event(&signal_ehip_timer_100ms), 
         (eh_sclock_t)eh_msec_to_clock(100*1), 
         EH_TIMER_ATTR_AUTO_CIRCULATION);
-    ret = eh_signal_register(&signal_ehip_timer_100ms);
-    if(ret < 0) goto eh_signal_register_timer_100ms_error;
     ret = eh_timer_start(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
     if(ret < 0) goto eh_timer_100ms_start_error;
 
     /* 注册连接邮箱RX信号和槽 */
-    ret = eh_signal_register(&signal_mbox_rx);
-    if(ret < 0) goto eh_signal_register_mbox_rx_error;
-    eh_signal_slot_connect(&signal_mbox_rx, &slot_mbox_rx);
+    ret = eh_signal_slot_connect(&signal_mbox_rx, &slot_mbox_rx);
+    if(ret < 0) goto eh_signal_slot_connect_mbox_rx;
     eh_llist_head_init(&mbox_rx);
     /* 申请一个内存池作为网络数据的邮件 */
     pool_mbox_msg_rx = eh_mem_pool_create(EHIP_POOL_BASE_ALIGN, sizeof(struct ehip_mbox_msg_rx), EHIP_CORE_MBOX_NETDEV_RX_MSG_BUFFER_NUM);
@@ -286,37 +273,26 @@ static int __init ehip_core_init(void){
 eh_mem_pool_create_queue_entry_tx_error:
     eh_mem_pool_destroy(pool_mbox_msg_rx);
 eh_mem_pool_create_mbox_msg_netdev_rx_error:
-    eh_signal_slot_disconnect(&slot_mbox_rx);
-    eh_signal_unregister(&signal_mbox_rx);
-eh_signal_register_mbox_rx_error:
+    eh_signal_slot_disconnect(&signal_mbox_rx, &slot_mbox_rx);
+eh_signal_slot_connect_mbox_rx:
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
 eh_timer_100ms_start_error:
-    eh_signal_unregister(&signal_ehip_timer_100ms);
-eh_signal_register_timer_100ms_error:
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
 eh_timer_500ms_start_error:
-    eh_signal_unregister(&signal_ehip_timer_500ms);
-eh_signal_register_timer_500ms_error:
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));
 eh_timer_1s_start_error:
-    eh_signal_unregister(&signal_ehip_timer_1s);
     return ret;
 }
 
 static void __exit ehip_core_exit(void){
-
     _ehip_mbox_msg_clean();
 
     eh_mem_pool_destroy(pool_queue_entry_tx);
     eh_mem_pool_destroy(pool_mbox_msg_rx);
-    eh_signal_slot_disconnect(&slot_mbox_rx);
-    eh_signal_unregister(&signal_mbox_rx);
+    eh_signal_slot_disconnect(&signal_mbox_rx, &slot_mbox_rx);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
-    eh_signal_unregister(&signal_ehip_timer_100ms);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
-    eh_signal_unregister(&signal_ehip_timer_500ms);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));
-    eh_signal_unregister(&signal_ehip_timer_1s);
 }
 
 ehip_core_module_export(ehip_core_init, ehip_core_exit);

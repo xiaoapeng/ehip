@@ -290,13 +290,18 @@ static struct ehip_protocol_handle ip_protocol_handle = {
 
 
 static int __init ip_protocol_parser_init(void){
-    eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
+    int ret;
+    ret = eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
+    if(ret < 0){
+        eh_merrfl(IP_INPUT, "eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer) = %d", ret);
+        return ret;
+    }
     return ehip_protocol_handle_register(&ip_protocol_handle);
 }
 
 static void __exit ip_protocol_parser_exit(void){
     ip_fragment_clean();
-    eh_signal_slot_disconnect(&slot_timer);
+    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
     ehip_protocol_handle_unregister(&ip_protocol_handle);
 }
 

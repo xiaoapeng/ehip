@@ -39,9 +39,6 @@ ehip_netdev_t* ehip_netdev_register(enum ehip_netdev_type type, const struct ehi
     /* 初始化状态信号 */
     eh_signal_init(&netdev->signal_status);
     eh_event_flags_init(eh_signal_to_custom_event(&netdev->signal_status));
-    ret = eh_signal_register(&netdev->signal_status);
-    if(ret < 0)
-        goto eh_signal_register_error;
 
     ret = _ehip_core_netdev_init(netdev);
     if(ret < 0){
@@ -54,11 +51,7 @@ ehip_netdev_t* ehip_netdev_register(enum ehip_netdev_type type, const struct ehi
     eh_list_add(&netdev->node, &s_netdev_head);
 
     return netdev;
-eh_signal_register_error:
-    _ehip_core_netdev_exit(netdev);
 _ehip_core_netdev_init_error:
-    eh_signal_unregister(&netdev->signal_status);
-    /* eh_event_flags_clean、eh_signal_clean 无需调用 */
     eh_free(netdev);
     return eh_error_to_ptr(ret);
 }
@@ -66,9 +59,8 @@ _ehip_core_netdev_init_error:
 void ehip_netdev_unregister(ehip_netdev_t *netdev){
     eh_list_del(&netdev->node);
     _ehip_core_netdev_exit(netdev);
-    eh_signal_unregister(&netdev->signal_status);
     eh_event_flags_clean(eh_signal_to_custom_event(&netdev->signal_status));
-    eh_signal_clean(&netdev->signal_status);
+    eh_signal_slot_clean(&netdev->signal_status);
     eh_free(netdev);
 }
 

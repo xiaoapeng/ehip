@@ -141,6 +141,7 @@ struct tcp_pcb{
     struct tcp_base_opt             opt;
     uint32_t                        last_route_trait_value;
     uint32_t                        ts_recent;                  /* 最近的时间戳 */
+    eh_signal_base_t                *timer_signal_type;         
     eh_signal_slot_t                slot_timer_timeout;
     eh_signal_slot_t                slot_timer_rto_timeout;
     EH_STRUCT_CUSTOM_SIGNAL(eh_event_timer_t) 
@@ -398,7 +399,7 @@ static void slot_function_timer_timeout(eh_event_t *e, void *arg){
     pcb->retry_countdown--;
     if(pcb->retry_countdown == 0){
         /* 最终超时处理 */
-        eh_signal_slot_disconnect(&pcb->slot_timer_timeout);
+        tcp_stop_simple_timer(pcb);
         /* 根据状态机来进行处理 */
         switch (pcb->state) {
             case TCP_STATE_SYN_SENT:
@@ -496,12 +497,14 @@ static int tcp_start_simple_timer(struct tcp_pcb *pcb, eh_signal_base_t *timer_s
     pcb->retry_countdown = retry_countdown + 1;
     pcb->timeout_countdown = timeout_countdown;
     pcb->timeout_reload = timeout_countdown;
+    pcb->timer_signal_type = timer_signal_type;
     return 0;
 }
 
 
 static void tcp_stop_simple_timer(struct tcp_pcb *pcb){
-    eh_signal_slot_disconnect(&pcb->slot_timer_timeout);
+    eh_signal_slot_disconnect(pcb->timer_signal_type, &pcb->slot_timer_timeout);
+    pcb->timer_signal_type = NULL;
 }
 
 
@@ -536,6 +539,7 @@ static tcp_pcb_t tcp_pcb_base_new(uint16_t config_flags, struct tcp_hash_key *ke
     new_pcb->tx_buf_size = tx_buf_size;
     new_pcb->rx_buf = NULL;
     new_pcb->tx_buf = NULL;
+    new_pcb->timer_signal_type = NULL;
     eh_signal_slot_init(&new_pcb->slot_timer_timeout, slot_function_timer_timeout, new_pcb);
     eh_signal_slot_init(&new_pcb->slot_timer_rto_timeout, slot_function_timer_rto, new_pcb);
 
@@ -544,14 +548,13 @@ static tcp_pcb_t tcp_pcb_base_new(uint16_t config_flags, struct tcp_hash_key *ke
     eh_timer_advanced_init(
        eh_signal_to_custom_event(&new_pcb->signal_timer_rto), 
             0, 0);
-    ret = eh_signal_register(&new_pcb->signal_timer_rto);
+    ret = eh_signal_slot_connect(&new_pcb->signal_timer_rto, &new_pcb->slot_timer_rto_timeout);
     if(ret < 0){
-        goto eh_signal_register_timer_delay_ack_error;
+        goto eh_signal_slot_connect_rto_error;
     }
-    eh_signal_slot_connect(&new_pcb->signal_timer_rto, &new_pcb->slot_timer_rto_timeout);
 
     return (tcp_pcb_t)new_pcb;
-eh_signal_register_timer_delay_ack_error:
+eh_signal_slot_connect_rto_error:
     eh_hashtbl_node_delete(NULL, new_pcb->node);
 eh_hashtbl_node_new_error:
     eh_free(new_pcb);
@@ -1705,11 +1708,10 @@ static bool tcp_close(struct tcp_pcb *pcb, bool is_user_close){
     eh_mdebugfl(TCP_CLOSE, IPV4_FORMATIO":%d <->"IPV4_FORMATIO":%d close....", 
             ipv4_formatio(key->local_addr), eh_ntoh16(key->local_port),
             ipv4_formatio(key->remote_addr), eh_ntoh16(key->remote_port));
-    eh_signal_slot_disconnect(&pcb->slot_timer_timeout);
+    tcp_stop_simple_timer(pcb);
     eh_timer_stop(eh_signal_to_custom_event(&pcb->signal_timer_rto));
 
-    eh_signal_slot_disconnect(&pcb->slot_timer_rto_timeout);
-    eh_signal_unregister(&pcb->signal_timer_rto);
+    eh_signal_slot_disconnect(&pcb->signal_timer_rto, &pcb->slot_timer_rto_timeout);
     tcp_close_tx(pcb);
     tcp_close_rx(pcb);
     eh_hashtbl_node_delete(NULL, pcb->node);

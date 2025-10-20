@@ -564,9 +564,9 @@ static void __exit arp_protocol_parser_exit(void){
 
 static int __init arp_init(void){
     int ret;
-    ret = eh_signal_register(&signal_arp_table_changed);
-    if(ret < 0) return ret;
-    eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
+    ret = eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
+    if(ret < 0)
+        return ret;
     memset(&_arp_table, 0, sizeof(_arp_table));
     memset(&_arp_table[ARP_MARS_IDX].hw_addr, 0xff, sizeof(struct ehip_max_hw_addr));
     _arp_table[ARP_MARS_IDX].ip_addr = IPV4_ADDR_ANY;
@@ -576,10 +576,9 @@ static int __init arp_init(void){
 }
 
 static void __exit arp_exit(void){
-    eh_signal_slot_disconnect(&slot_timer);
-    eh_signal_unregister(&signal_arp_table_changed);
+    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
     /* 避免connect signal_arptable_changed的任务继续运行导致的问题 */
-    eh_signal_clean(&signal_arp_table_changed);
+    eh_signal_slot_clean(&signal_arp_table_changed);
 }
 
 

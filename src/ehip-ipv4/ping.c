@@ -215,13 +215,12 @@ static ping_pcb_t _ehip_ping_new(ipv4_addr_t src_addr, ipv4_addr_t dst_addr, ehi
     eh_signal_init(&pcb->signal_timeout);
     eh_timer_advanced_init(eh_signal_to_custom_event(&pcb->signal_timeout), 
         (eh_sclock_t)eh_msec_to_clock(PING_REQUEST_TIMEOUT_DEFAULT * 100) , 0);
-    ret = eh_signal_register(&pcb->signal_timeout);
+    ret = eh_signal_slot_connect(&pcb->signal_timeout, &pcb->slot_timeout);
     if(ret < 0)
-        goto eh_signal_register;
-    eh_signal_slot_connect(&pcb->signal_timeout, &pcb->slot_timeout);
+        goto eh_signal_slot_connect_err;
 
     return (ping_pcb_t)pcb;
-eh_signal_register:
+eh_signal_slot_connect_err:
     eh_mem_pool_free(ping_pcb_pool, pcb);
     return eh_error_to_ptr(ret);
 }
@@ -310,8 +309,7 @@ ping_pcb_t ehip_ping_any_new(ipv4_addr_t dst_addr){
 void ehip_ping_delete(ping_pcb_t _pcb){
     struct ping_pcb *pcb = (struct ping_pcb *)_pcb;
     eh_timer_stop(eh_signal_to_custom_event(&pcb->signal_timeout));
-    eh_signal_slot_disconnect(&pcb->slot_timeout);
-    eh_signal_unregister(&pcb->signal_timeout);
+    eh_signal_slot_disconnect(&pcb->signal_timeout, &pcb->slot_timeout);
     eh_mem_pool_free(ping_pcb_pool, pcb);
 }
 

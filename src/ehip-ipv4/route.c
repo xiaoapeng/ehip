@@ -35,7 +35,7 @@ uint32_t _route_trait_value = 0;
 EH_DEFINE_SIGNAL(sig_route_changed);
 
 static void _ehip_ipv4_route_delete(struct route_table_entry *entry){
-    eh_signal_slot_disconnect(&entry->slot_netdev_status_change);
+    eh_signal_slot_disconnect(&sig_route_changed, &entry->slot_netdev_status_change);
     eh_list_del(&entry->node);
     eh_free(entry);
     route_cnt--;
@@ -94,6 +94,7 @@ static uint32_t ehip_ipv4_route_entry_match_level(ipv4_addr_t dst_addr, const st
 
 int ipv4_route_add(const struct route_info *route){
     struct route_table_entry *entry;
+    int ret;
     eh_param_assert(route);
     eh_param_assert(route->mask_len <= 32);
 
@@ -109,11 +110,16 @@ int ipv4_route_add(const struct route_info *route){
     eh_list_add_tail(&entry->node, &route_head);
     eh_signal_slot_init(&entry->slot_netdev_status_change, netdev_status_change, entry);
     /* 注册当网络状态 DOWN时删除该路由 */
-    eh_signal_slot_connect(&entry->route.netdev->signal_status, &entry->slot_netdev_status_change);
+    ret = eh_signal_slot_connect(&entry->route.netdev->signal_status, &entry->slot_netdev_status_change);
+    if(ret)
+        goto eh_signal_slot_connect_err;
     route_cnt ++;
     _route_trait_value ++;
     eh_signal_notify(&sig_route_changed);
     return 0;
+eh_signal_slot_connect_err:
+    eh_free(entry);
+    return ret;
 }
 
 
@@ -314,7 +320,6 @@ static int __init ehip_ipv4_route_init(void)
 {
     route_cnt = 0;
     eh_list_head_init(&route_head);
-    eh_signal_register(&sig_route_changed);
 
     return 0;
 }
@@ -322,9 +327,7 @@ static int __init ehip_ipv4_route_init(void)
 static void __exit ehip_ipv4_route_exit(void)
 {
     struct route_table_entry *pos, *n;
-
-    eh_signal_unregister(&sig_route_changed);
-    eh_signal_clean(&sig_route_changed);
+    eh_signal_slot_clean(&sig_route_changed);
 
     eh_list_for_each_entry_safe(pos, n, &route_head, node)
         _ehip_ipv4_route_delete(pos);
