@@ -291,9 +291,9 @@ static struct ehip_protocol_handle ip_protocol_handle = {
 
 static int __init ip_protocol_parser_init(void){
     int ret;
-    ret = eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
+    ret = eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer);
     if(ret < 0){
-        eh_merrfl(IP_INPUT, "eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer) = %d", ret);
+        eh_merrfl(IP_INPUT, "eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer) = %d", ret);
         return ret;
     }
     return ehip_protocol_handle_register(&ip_protocol_handle);

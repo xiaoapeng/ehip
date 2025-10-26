@@ -33,6 +33,10 @@
 #include <ehip-ipv4/arp.h>
 #include <ehip-ipv4/ip.h>
 
+#ifndef EH_DBG_MODEULE_LEVEL_ARP
+#define EH_DBG_MODEULE_LEVEL_ARP EH_DBG_WARNING
+#endif
+
 EH_DEFINE_SIGNAL(signal_arp_table_changed);
 struct arp_entry _arp_table[EHIP_ARP_CACHE_MAX_NUM + 1];
 
@@ -555,18 +559,19 @@ static struct ehip_protocol_handle arp_protocol_handle = {
 
 
 static int __init arp_protocol_parser_init(void){
+    int ret;
+    ret = eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer);
+    if(ret < 0)
+        return ret;
     return ehip_protocol_handle_register(&arp_protocol_handle);
 }
 
 static void __exit arp_protocol_parser_exit(void){
     ehip_protocol_handle_unregister(&arp_protocol_handle);
+    eh_signal_slot_disconnect_from_main(&signal_ehip_timer_1s, &slot_timer);
 }
 
 static int __init arp_init(void){
-    int ret;
-    ret = eh_signal_slot_connect(&signal_ehip_timer_1s, &slot_timer);
-    if(ret < 0)
-        return ret;
     memset(&_arp_table, 0, sizeof(_arp_table));
     memset(&_arp_table[ARP_MARS_IDX].hw_addr, 0xff, sizeof(struct ehip_max_hw_addr));
     _arp_table[ARP_MARS_IDX].ip_addr = IPV4_ADDR_ANY;
@@ -575,12 +580,5 @@ static int __init arp_init(void){
     return 0;
 }
 
-static void __exit arp_exit(void){
-    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
-    /* 避免connect signal_arptable_changed的任务继续运行导致的问题 */
-    eh_signal_slot_clean(&signal_arp_table_changed);
-}
-
-
-ehip_preinit_module_export(arp_init, arp_exit);
+ehip_preinit_module_export(arp_init, NULL);
 ehip_protocol_module_export(arp_protocol_parser_init, arp_protocol_parser_exit);

@@ -60,7 +60,6 @@ void ehip_netdev_unregister(ehip_netdev_t *netdev){
     eh_list_del(&netdev->node);
     _ehip_core_netdev_exit(netdev);
     eh_event_flags_clean(eh_signal_to_custom_event(&netdev->signal_status));
-    eh_signal_slot_clean(&netdev->signal_status);
     eh_free(netdev);
 }
 

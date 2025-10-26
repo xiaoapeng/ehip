@@ -170,7 +170,7 @@ int  _ehip_core_netdev_init(ehip_netdev_t *netdev){
     eh_llist_head_init(&netdev->tx_queue);
     eh_signal_init(&netdev->signal_tx_wakeup);
     eh_signal_slot_init(&netdev->slot_tx_wakeup, slot_function_start_xmit, netdev);
-    ret = eh_signal_slot_connect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
+    ret = eh_signal_slot_connect_to_main(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
     if(ret < 0){
         goto eh_signal_slot_connect_error;
     }
@@ -183,24 +183,22 @@ int  _ehip_core_netdev_init(ehip_netdev_t *netdev){
     );
 
     eh_signal_slot_init(&netdev->slot_watchdog, slot_function_watchdog_timeout, netdev);
-    ret = eh_signal_slot_connect(&netdev->signal_watchdog, &netdev->slot_watchdog);
+    ret = eh_signal_slot_connect_to_main(&netdev->signal_watchdog, &netdev->slot_watchdog);
     if(ret < 0){
         goto eh_signal_watchdog_connect_error;
     }
 
     return 0;
 eh_signal_watchdog_connect_error:
-    eh_signal_slot_disconnect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
+    eh_signal_slot_disconnect_from_main(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
 eh_signal_slot_connect_error:
     /* 无需调用 eh_signal_clean */
     return ret;
 }
 void _ehip_core_netdev_exit(ehip_netdev_t *netdev){
-    eh_signal_slot_disconnect(&netdev->signal_watchdog, &netdev->slot_watchdog);
+    eh_signal_slot_disconnect_from_main(&netdev->signal_watchdog, &netdev->slot_watchdog);
     eh_timer_clean(eh_signal_to_custom_event(&netdev->signal_watchdog));
-    eh_signal_slot_clean(&netdev->signal_watchdog);
-    eh_signal_slot_disconnect(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
-    eh_signal_slot_clean(&netdev->signal_tx_wakeup);
+    eh_signal_slot_disconnect_from_main(&netdev->signal_tx_wakeup, &netdev->slot_tx_wakeup);
 }
 
 int  _ehip_core_netdev_up(ehip_netdev_t *netdev){
@@ -254,7 +252,7 @@ static int __init ehip_core_init(void){
     if(ret < 0) goto eh_timer_100ms_start_error;
 
     /* 注册连接邮箱RX信号和槽 */
-    ret = eh_signal_slot_connect(&signal_mbox_rx, &slot_mbox_rx);
+    ret = eh_signal_slot_connect_to_main(&signal_mbox_rx, &slot_mbox_rx);
     if(ret < 0) goto eh_signal_slot_connect_mbox_rx;
     eh_llist_head_init(&mbox_rx);
     /* 申请一个内存池作为网络数据的邮件 */
@@ -273,7 +271,7 @@ static int __init ehip_core_init(void){
 eh_mem_pool_create_queue_entry_tx_error:
     eh_mem_pool_destroy(pool_mbox_msg_rx);
 eh_mem_pool_create_mbox_msg_netdev_rx_error:
-    eh_signal_slot_disconnect(&signal_mbox_rx, &slot_mbox_rx);
+    eh_signal_slot_disconnect_from_main(&signal_mbox_rx, &slot_mbox_rx);
 eh_signal_slot_connect_mbox_rx:
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
 eh_timer_100ms_start_error:
@@ -289,7 +287,7 @@ static void __exit ehip_core_exit(void){
 
     eh_mem_pool_destroy(pool_queue_entry_tx);
     eh_mem_pool_destroy(pool_mbox_msg_rx);
-    eh_signal_slot_disconnect(&signal_mbox_rx, &slot_mbox_rx);
+    eh_signal_slot_disconnect_from_main(&signal_mbox_rx, &slot_mbox_rx);
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_100ms));
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_500ms));
     eh_timer_stop(eh_signal_to_custom_event(&signal_ehip_timer_1s));

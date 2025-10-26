@@ -85,6 +85,7 @@ static int arp_query_add(struct ip_message *ip_msg, ipv4_addr_t dst_addr_or_gw_a
     struct arp_query_pcb *new_query = eh_mem_pool_alloc(arp_query_pool);
 
     if(new_query == NULL){
+        eh_merrfl(IP_TX, "arp query add failed, ip_msg %p, dst_addr_or_gw_addr " IPV4_FORMATIO ", arp_idx %d", ip_msg, ipv4_formatio(dst_addr_or_gw_addr), arp_idx);
         ret = EH_RET_MEM_POOL_EMPTY;
         goto error;
     }
@@ -200,7 +201,7 @@ int __init ip_tx_init(void){
     ret = eh_ptr_to_error(arp_query_pool);
     if(ret < 0)
         return ret;
-    ret = eh_signal_slot_connect(&signal_arp_table_changed, &slot_arp_table_changed);
+    ret = eh_signal_slot_connect_to_main(&signal_arp_table_changed, &slot_arp_table_changed);
     if(ret < 0){
         eh_mem_pool_destroy(arp_query_pool);
         return ret;
@@ -211,7 +212,7 @@ int __init ip_tx_init(void){
 void __exit ip_tx_exit(void){
     int i;
     struct arp_query_pcb *ptr;
-    eh_signal_slot_disconnect(&signal_arp_table_changed, &slot_arp_table_changed);
+    eh_signal_slot_disconnect_from_main(&signal_arp_table_changed, &slot_arp_table_changed);
     eh_mem_pool_for_each(i, arp_query_pool, ptr){
         if(eh_mem_pool_idx_is_used(arp_query_pool, i)){
             ip_message_free(((struct arp_query_pcb *)ptr)->ip_msg);
