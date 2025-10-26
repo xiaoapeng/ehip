@@ -29,6 +29,7 @@ enum tcp_event{
     TCP_RECV_FIN,
     TCP_RECV_RST,
     TCP_SEND_TIMEOUT,
+    TCP_KEEPALIVE_TIMEOUT,
     TCP_DISCONNECTED,
     TCP_CONNECTED,
     TCP_RECV_DATA,
@@ -151,6 +152,7 @@ extern eh_ringbuf_t *ehip_tcp_client_get_send_ringbuf(tcp_pcb_t pcb);
 extern eh_ringbuf_t *ehip_tcp_client_get_recv_ringbuf(tcp_pcb_t pcb);
 
 extern int ehip_tcp_client_request_send(tcp_pcb_t pcb);
+extern void tcp_keepalive_time_config(tcp_pcb_t pcb, uint16_t *time, uint16_t *intvl, uint8_t *retry_num);
 
 
 
@@ -159,7 +161,6 @@ extern tcp_server_pcb_t ehip_tcp_server_any_new(uint16_be_t bind_port, uint16_t 
 extern void ehip_tcp_server_delete(tcp_server_pcb_t pcb);
 extern int ehip_tcp_server_listen(tcp_server_pcb_t pcb);
 extern void ehip_tcp_server_set_new_connect_callback(tcp_server_pcb_t pcb, void (*new_connect)(tcp_pcb_t new_client));
-
 
 
 #ifdef __cplusplus
