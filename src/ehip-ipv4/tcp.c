@@ -171,6 +171,7 @@ struct tcp_pcb{
             uint16_t                user_req_transmit:1;        /* 用户请求发送 */
             uint16_t                user_req_disconnect:1;      /* 用户请求断开 */
             uint16_t                fin_sent:1;                 /* 是否发送了FIN */
+            uint16_t                detect_wait_ack:1;          /* 0窗口探测报文等待ACK */
         };
     };
     struct eh_hashtbl_node          *node;
@@ -305,10 +306,11 @@ struct tcp_recv_pack_info{
     const struct tcp_option_tsopt     *opt_tsopt;
     uint32_t                          ack_cnt;
 
-#define TCP_RECV_DATA_RET_SUCCESS     0x00000001        /* 接收到数据 */
-#define TCP_RECV_DATA_RET_FIN         0x00000002        /* 接收到FIN */
-#define TCP_RECV_DATA_RET_PUSH        0x00000004        /* 意味着需要推送数据给用户 */
-#define TCP_RECV_DATA_RET_ACK         0x00000008        /* 需要响应ACK */
+#define TCP_RECV_DATA_RET_SUCCESS           0x00000001        /* 接收到数据 */
+#define TCP_RECV_DATA_RET_FIN               0x00000002        /* 接收到FIN */
+#define TCP_RECV_DATA_RET_PUSH              0x00000004        /* 意味着需要推送数据给用户 */
+#define TCP_RECV_DATA_RET_ACK               0x00000008        /* 需要响应ACK */
+#define TCP_RECV_DATA_RET_SEQ_UNEXPECTED    0x00000010        /* seq不在预期范围内 */
     uint16_t                          recv_flags;
     ehip_buffer_size_t                data_len;
 };
@@ -557,28 +559,40 @@ static void slot_function_timer_500ms(eh_event_t *e, void *arg){
     }
     do{
         ehip_buffer_size_t pending_ack_size, ring_buffer_size;
+        int window_size;
+        uint32_t snd_nxt;
 
         if(pcb->zero_window_detect_reload_val == 0)
             break;
 
         pending_ack_size = (ehip_buffer_size_t)(pcb->snd_nxt - pcb->snd_una);
         ring_buffer_size = (ehip_buffer_size_t)eh_ringbuf_size(pcb->tx_buf);
-        if( pcb->rcv_wnd - pending_ack_size != 0 || 
-            ring_buffer_size - pending_ack_size == 0){
+        /* window_size 可以巧妙的为 -1 */
+        window_size = pcb->rcv_wnd - pending_ack_size;
+        if( window_size > 0 || 
+            ring_buffer_size - pending_ack_size - window_size == 0){
             pcb->zero_window_detect_reload_val = 0;
             break;
         }
         if(--pcb->zero_window_detect_countdown)
             break;
-        if(pcb->zero_window_detect_reload_val < TCP_ZERO_WINDOW_DETECT_RELOAD_VAL_MAX)
+        if(pcb->zero_window_detect_reload_val < TCP_ZERO_WINDOW_DETECT_RELOAD_VAL_MAX){
             pcb->zero_window_detect_reload_val++;
+        }else if(pcb->detect_wait_ack){
+            /* 说明没有收到ack */
+            tcp_interior_try_close(pcb, TCP_SEND_TIMEOUT);
+            return ;
+        }
         pcb->zero_window_detect_countdown = (uint16_t)(1 << (pcb->zero_window_detect_reload_val + 2)) & TCP_ZERO_WINDOW_DETECT_MARK;
 
         /* 发送一个字节大小的探测报文 */
         {
             struct tcp_send_option_info option_info;
             tcp_option_info_get(pcb, &option_info);
-            tcp_transmit_msg(pcb, &option_info, TCP_FLAG_ACK, pcb->snd_nxt, 1);
+            snd_nxt = pcb->snd_nxt + (uint32_t)window_size;
+            tcp_transmit_msg(pcb, &option_info, TCP_FLAG_ACK, snd_nxt, 1);
+            pcb->snd_nxt = snd_nxt + 1;
+            pcb->detect_wait_ack = true;
         }
     }while(0);
 
@@ -586,13 +600,17 @@ static void slot_function_timer_500ms(eh_event_t *e, void *arg){
         if(pcb->state != TCP_STATE_ESTABLISHED && pcb->keepalive_time_reload_val == 0)
             break;
         if(pcb->keepalive_wait_ack){
+            eh_mdebugfl(TCP_KEEPALIVE_TIMEOUT, "@%#p keepalive_wait_ack_countdown:%u pcb->keepalive_timeout_cnt_countdown:%u", 
+                pcb, pcb->keepalive_wait_ack_countdown, pcb->keepalive_timeout_cnt_countdown);
             if(--pcb->keepalive_wait_ack_countdown)
                 break;
-            if(--pcb->keepalive_timeout_cnt_countdown){
+            pcb->keepalive_wait_ack_countdown = (uint16_t)(1 << (pcb->keepalive_intvl_reload_val+1)) & TCP_KEEPLIVE_TIME_WITA_ACK_MARK;
+            if(--pcb->keepalive_timeout_cnt_countdown == 0){
                 tcp_interior_try_close(pcb, TCP_KEEPALIVE_TIMEOUT);
-                break;
+                return ;
             }
         }else{
+            eh_mdebugfl(TCP_KEEPALIVE_TIMEOUT, "@%#p keepalive_time_countdown:%u", pcb, pcb->keepalive_time_countdown);
             if(--pcb->keepalive_time_countdown)
                 break;
             /* 检测超时 */
@@ -1106,7 +1124,6 @@ static int tcp_recv_ack(struct tcp_pcb *pcb, struct tcp_recv_pack_info *pack_inf
         return TCP_RECV_ACK_RET_ON_RECV;
         
     ack_seq = eh_ntoh32(pack_info->hdr->ack_seq);
-    
     eh_mdebugfl(TCP, "ack_seq:%u snd_una:%u snd_nxt:%u", ack_seq, pcb->snd_una, pcb->snd_nxt);
     if(!tcp_seq_check(pcb->snd_una, pcb->snd_nxt + 1, ack_seq)){
         pcb->dup_ack_cnt =  0;
@@ -1247,11 +1264,17 @@ static uint32_t tcp_recv_data(struct tcp_pcb *pcb, ehip_buffer_size_t *data_len_
     bool recv_fin = false;
     int start_diff;
     
-    if(data_len == 0 && hdr->fin == false)
-        return 0;
-    // eh_mdebugfl(TCP_RECV_DATA, "s:%u a:%u", eh_ntoh32(hdr->seq), eh_ntoh32(hdr->ack_seq));
     data_start_seq = eh_ntoh32(hdr->seq);
     rcv_nxt = pcb->rcv_nxt;
+    rx_win_size = (ehip_buffer_size_t)eh_ringbuf_free_size(pcb->rx_buf);
+    rx_win_limit = rcv_nxt + (uint32_t)rx_win_size;
+
+    if(data_len == 0 && hdr->fin == false){
+        if(tcp_seq_check(rcv_nxt, rx_win_limit+2, data_start_seq))
+            return 0;
+        return TCP_RECV_DATA_RET_SEQ_UNEXPECTED;
+    }
+    // eh_mdebugfl(TCP_RECV_DATA, "s:%u a:%u", eh_ntoh32(hdr->seq), eh_ntoh32(hdr->ack_seq));
     
     data_end_seq = data_start_seq + (uint32_t)data_len;
     if(data_end_seq == rcv_nxt){
@@ -1262,8 +1285,6 @@ static uint32_t tcp_recv_data(struct tcp_pcb *pcb, ehip_buffer_size_t *data_len_
         }
         return TCP_RECV_DATA_RET_ACK;
     }
-    rx_win_size = (ehip_buffer_size_t)eh_ringbuf_free_size(pcb->rx_buf);
-    rx_win_limit = rcv_nxt + (uint32_t)rx_win_size;
     if(rx_win_size == 0){
         /* 窗口为0 */
         if(hdr->fin){
@@ -1958,6 +1979,9 @@ static int tcp_common_recv_pre_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack
         }else if(pcb->retransmit == 0 && pcb->snd_nxt == pcb->snd_una){
             tcp_update_srtt(pcb);
         }
+        if(pcb->detect_wait_ack){
+            pcb->detect_wait_ack = false;
+        }
     }
 
     if(ret > TCP_RECV_ACK_RET_ON_RECV){
@@ -2037,7 +2061,7 @@ static void tcp_common_recv_data_and_ack_pre_dispose(struct tcp_pcb *pcb, struct
 
     recv_pack_info->recv_flags = (uint16_t)tcp_recv_data(pcb, &recv_pack_info->data_len, recv_pack_info->hdr);
 
-    if((recv_pack_info->recv_flags & (TCP_RECV_DATA_RET_ACK | TCP_RECV_DATA_RET_PUSH | TCP_RECV_DATA_RET_FIN | TCP_RECV_DATA_RET_SUCCESS)))
+    if((recv_pack_info->recv_flags & (TCP_RECV_DATA_RET_ACK | TCP_RECV_DATA_RET_PUSH | TCP_RECV_DATA_RET_FIN | TCP_RECV_DATA_RET_SUCCESS | TCP_RECV_DATA_RET_SEQ_UNEXPECTED)))
         pcb->need_ack = 1;
 
     pcb->later_transmit = 1; /* 避免在回调函数中进行发送 */
@@ -2063,7 +2087,7 @@ static void tcp_common_recv_data_and_ack_pre_dispose(struct tcp_pcb *pcb, struct
 static void tcp_client_recv_data_auto_ack(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     int ret;
     if(pcb->need_ack){
-        if(recv_pack_info->recv_flags & (TCP_RECV_DATA_RET_ACK | TCP_RECV_DATA_RET_PUSH | TCP_RECV_DATA_RET_FIN) ){
+        if(recv_pack_info->recv_flags & (TCP_RECV_DATA_RET_ACK | TCP_RECV_DATA_RET_PUSH | TCP_RECV_DATA_RET_FIN | TCP_RECV_DATA_RET_SEQ_UNEXPECTED) ){
             ret = tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
             if(ret == 0){
                 pcb->need_ack = 0;
@@ -2325,13 +2349,12 @@ static void tcp_closing_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_i
         case TCP_COMMON_RECV_PRE_RET_QUIT:
             goto quit;
         case TCP_COMMON_RECV_PRE_RET_DROP:
-        case TCP_COMMON_RECV_PRE_RET_ACK_OF_RANGE:
             goto drop;
         default:
             break;
     }
 
-    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
+    if(recv_pack_info->hdr->seq != eh_hton32(pcb->rcv_nxt))
         tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
     if(ret > 0){
         /* 收到ACK ---> 进入 TCP_STATE_TIME_WAIT 状态  */
@@ -2353,12 +2376,11 @@ static void tcp_time_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack
         case TCP_COMMON_RECV_PRE_RET_QUIT:
             goto quit;
         case TCP_COMMON_RECV_PRE_RET_DROP:
-        case TCP_COMMON_RECV_PRE_RET_ACK_OF_RANGE:
             goto drop;
         default:
             break;
     }
-    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
+    if(recv_pack_info->hdr->seq != eh_hton32(pcb->rcv_nxt))
         tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
 
 quit:
@@ -2375,14 +2397,13 @@ static void tcp_close_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pac
         case 0:
         case TCP_COMMON_RECV_PRE_RET_QUIT:
             goto quit;
-        case TCP_COMMON_RECV_PRE_RET_ACK_OF_RANGE:
         case TCP_COMMON_RECV_PRE_RET_DROP:
             goto drop;
         default:
             break;
     }
 
-    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
+    if(recv_pack_info->hdr->seq != eh_hton32(pcb->rcv_nxt))
         pcb->need_ack = 1;
 
     tcp_client_auto_send(pcb, recv_pack_info->opt_sack);
@@ -2410,13 +2431,12 @@ static void tcp_last_ack_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_
         case TCP_COMMON_RECV_PRE_RET_QUIT:
             goto quit;
         case TCP_COMMON_RECV_PRE_RET_DROP:
-        case TCP_COMMON_RECV_PRE_RET_ACK_OF_RANGE:
             goto drop;
         default:
             break;
     }
 
-    if(tcp_client_later_recv_is_fin(pcb, recv_pack_info))
+    if(recv_pack_info->hdr->seq != eh_hton32(pcb->rcv_nxt))
         tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
 
     if(ret){
