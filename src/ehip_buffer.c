@@ -22,6 +22,10 @@
 
 #define EHIP_BUFFER_REF_MAX_NUM UINT16_MAX
 
+#ifndef EH_DBG_MODEULE_LEVEL_EHIP_BUFFER
+#define EH_DBG_MODEULE_LEVEL_EHIP_BUFFER EH_DBG_INFO
+#endif
+
 static eh_mem_pool_t pool_tab[EHIP_BUFFER_TYPE_MAX];
 static eh_mem_pool_t pool_ehip_buffer_ref;
 static eh_mem_pool_t pool_ehip_buffer;
