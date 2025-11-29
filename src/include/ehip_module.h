@@ -22,7 +22,7 @@ extern "C"{
 #define ehip_core_module_export(_init__func_, _exit__func_) _eh_define_module_export(_init__func_, _exit__func_, "2.0.1")
 #define ehip_netdev_module_export(_init__func_, _exit__func_) _eh_define_module_export(_init__func_, _exit__func_, "2.0.2")
 #define ehip_protocol_module_export(_init__func_, _exit__func_) _eh_define_module_export(_init__func_, _exit__func_, "2.0.3")
-
+#define ehip_app_protocol_module_export(_init__func_, _exit__func_) _eh_define_module_export(_init__func_, _exit__func_, "2.0.4")
 
 #ifdef __cplusplus
 #if __cplusplus
