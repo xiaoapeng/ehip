@@ -38,6 +38,7 @@
 #include <ehip-ipv4/_pseudo_header.h>
 #include <ehip-ipv4/ip_message.h>
 #include <ehip-ipv4/ip_tx.h>
+#include <ehip-ipv4/port_alloc.h>
 
 #define TCP_TIMEOUT_500MS_TIMER             ((&signal_ehip_timer_500ms))
 
@@ -67,7 +68,6 @@
 #define TCP_LAN_MIN_RTO                    (8)
 #define TCP_MAX_RTT                        (1000 * 30)
 #define TCP_INIT_SSTHRESH                  8
-#define TCP_PORT_ALLOC_START                (0xC000)
 
 #define TCP_PCB_PRIVATE_FLAGS_ANY                   0x00000001U
 #define TCP_PCB_PRIVATE_FLAGS_AUTO_PORT             0x00000002U
@@ -138,7 +138,6 @@ enum TCP_STATE{
 
 
 static eh_hashtbl_t         tcp_hash_tbl;
-static uint16_t             tcp_last_bind_port = 0x0000;
 struct tcp_base_opt{
     void (*events_callback)(tcp_pcb_t pcb, enum tcp_event state);
 };
@@ -383,22 +382,6 @@ static tcp_state_recv_dispose tcp_state_recv_dispose_tab[] = {
 static int tcp_transmit_syn(struct tcp_pcb *pcb, bool is_syn_ack, uint32_t seq);
 
 
-static uint16_be_t tcp_bind_port_alloc(void){
-    uint32_t t = (uint32_t)eh_get_clock_monotonic_time();
-    const uint32_t MAGIC1 = 1103515245u;
-    const uint32_t MAGIC2 = 2654435761u;
-
-    uint32_t mix = t ^ (tcp_last_bind_port * MAGIC1);
-    mix ^= (mix >> 16);
-    mix *= MAGIC2;
-    mix ^= (mix >> 13);
-
-    uint16_t rand_part = (uint16_t)(mix ^ (mix >> 8));
-
-    tcp_last_bind_port += rand_part;
-    tcp_last_bind_port |= TCP_PORT_ALLOC_START;
-    return eh_hton16(tcp_last_bind_port);
-}
 
 static inline void tcp_client_events_callback(struct tcp_pcb *pcb, enum tcp_event state){
     if(pcb->opt.events_callback)
@@ -418,7 +401,7 @@ static int tcp_pcb_hashtbl_install(struct eh_hashtbl_node *node, bool is_auto_po
     key = (struct tcp_hash_key*)eh_hashtbl_node_key(node);
     if(is_auto_port){
         for( ; ; ){
-            key->local_port = tcp_bind_port_alloc();
+            key->local_port = ehip_bind_port_alloc();
             ret = eh_hashtbl_find(tcp_hash_tbl, key, (eh_hashtbl_kv_len_t)sizeof(struct tcp_hash_key), NULL);
             if(ret == 0)
                 continue;

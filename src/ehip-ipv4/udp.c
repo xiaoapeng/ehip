@@ -38,6 +38,7 @@
 #include <ehip-ipv4/ip_tx.h>
 #include <ehip-ipv4/_pseudo_header.h>
 #include <ehip-ipv4/route_refresh.h>
+#include <ehip-ipv4/port_alloc.h>
 #include <ehip-mac/loopback.h>
 
 
@@ -85,7 +86,17 @@ static int udp_pcb_base_init(struct udp_pcb *pcb, uint16_be_t bind_port){
     struct udp_key key;
     struct udp_value *value;
     int ret;
-    key.src_port = bind_port;
+    if(bind_port == 0){
+        for( ; ; ){
+            key.src_port = ehip_bind_port_alloc();
+            ret = eh_hashtbl_find(udp_hash_tbl, &key, (eh_hashtbl_kv_len_t)sizeof(struct udp_key), NULL);
+            if(ret == 0)
+                continue;
+            break;
+        }
+    }else{
+        key.src_port = bind_port;
+    }
     node = eh_hashtbl_node_new_refresh(udp_hash_tbl, &key, (eh_hashtbl_kv_len_t)sizeof(struct udp_key), 
         (eh_hashtbl_kv_len_t)sizeof(struct udp_value));
     if(node == NULL)
@@ -380,13 +391,12 @@ void ehip_udp_set_error_callback(udp_pcb_t _pcb,
 void ehip_udp_sender_init(udp_pcb_t _pcb, struct udp_sender *sender, 
     ipv4_addr_t dst_addr, uint16_be_t dst_port){
     struct udp_pcb *pcb = (struct udp_pcb *)_pcb;
+    memset(sender, 0, sizeof(struct udp_sender));
     sender->pcb = _pcb;
     sender->arp_idx_cache = -1;
     sender->dst_addr = dst_addr;
     sender->dst_port = dst_port;
     sender->src_port = ((const struct udp_key*)eh_hashtbl_node_const_key(pcb->node))->src_port;
-    sender->ip_msg = NULL;
-    sender->route_type = ROUTE_TABLE_UNKNOWN;
 }
 
 
