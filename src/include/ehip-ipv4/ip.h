@@ -118,14 +118,14 @@ struct __packed ip_hdr {
 
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)(0xffffffffU >> (32 - (mask_len))))
+#define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)((mask_len) == 0 ? 0U : (0xffffffffU >> (32 - (mask_len)))))
 #define ipv4_make_addr(dec0, dec1, dec2, dec3) ((ipv4_addr_t)(((dec0) << 0) | ((dec1) << 8) | ((dec2) << 16) | ((dec3) << 24)))
 #define ipv4_addr_to_dec0(addr) ( ((addr) & 0x000000ff) >> 0  )
 #define ipv4_addr_to_dec1(addr) ( ((addr) & 0x0000ff00) >> 8  )
 #define ipv4_addr_to_dec2(addr) ( ((addr) & 0x00ff0000) >> 16 )
 #define ipv4_addr_to_dec3(addr) ( ((addr) & 0xff000000) >> 24 )
 #else
-#define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)(0xffffffffU << (32 - (mask_len))))
+#define ipv4_mask_len_to_mask(mask_len) ((ipv4_addr_t)((mask_len) == 0 ? 0U : (0xffffffffU << (32 - (mask_len)))))
 #define ipv4_make_addr(dec0, dec1, dec2, dec3) ((ipv4_addr_t)(((dec0) << 24) | ((dec1) << 16) | ((dec2) << 8) | ((dec3) << 0)))
 #define ipv4_addr_to_dec0(addr) ( ((addr) & 0xff000000) >> 24 )
 #define ipv4_addr_to_dec1(addr) ( ((addr) & 0x00ff0000) >> 16 )

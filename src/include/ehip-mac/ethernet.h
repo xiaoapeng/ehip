@@ -56,24 +56,15 @@ extern enum ehip_ptype eth_hdr_ptype_get(struct eth_hdr *eth_hdr);
  * @param  addr2            
  * @return true 相等
  */
-static inline bool eth_addr_equal_64bits(const ehip_eth_addr_t *addr1, const ehip_eth_addr_t *addr2)
+static inline bool eth_addr_equal(const ehip_eth_addr_t *addr1, const ehip_eth_addr_t *addr2)
 {
-	uint64_t fold = (*(const uint64_t *)addr1) ^ (*(const uint64_t *)addr2);
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	return (fold >> 16) == 0;
-#else
-	return (fold << 16) == 0;
-#endif
+	return memcmp(addr1, addr2, EHIP_ETH_HWADDR_LEN) == 0;
 }
 
 
-static inline bool eth_is_multicast_ether_addr_64bits(const ehip_eth_addr_t *addr)
+static inline bool eth_is_multicast_ether_addr(const ehip_eth_addr_t *addr)
 {
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	return 0x01 & ((*(const u64 *)addr) >> 56);
-#else
-	return 0x01 & (*(const uint64_t *)addr);
-#endif
+	return (addr->addr[0] & 0x01) != 0;
 }
 
 

@@ -34,10 +34,10 @@ static void ethernet_v2_handle(struct ehip_buffer* buf){
     eh_mdebugln( ETHERNET_V2, "rx buf size %d", ehip_buffer_get_payload_size(buf));
     eh_mdebugln( ETHERNET_V2, "rx data :|%.*hhq|", ehip_buffer_get_payload_size(buf), ehip_buffer_get_payload_ptr(buf));
 
-    if(eh_likely(eth_addr_equal_64bits(&hdr->dest, if_mac))){
+    if(eh_likely(eth_addr_equal(&hdr->dest, if_mac))){
         buf->packet_type = EHIP_PACKET_TYPE_HOST;
-    }else if(eh_unlikely(eth_is_multicast_ether_addr_64bits(&hdr->dest))){
-        if(eth_addr_equal_64bits(&hdr->dest, EHIP_ETH_MAC_ADDR_BROADCAST)){
+    }else if(eh_unlikely(eth_is_multicast_ether_addr(&hdr->dest))){
+        if(eth_addr_equal(&hdr->dest, EHIP_ETH_MAC_ADDR_BROADCAST)){
             buf->packet_type = EHIP_PACKET_TYPE_BROADCAST;
         }else{
             buf->packet_type = EHIP_PACKET_TYPE_MULTICAST;
