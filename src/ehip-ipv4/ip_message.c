@@ -610,7 +610,7 @@ int _ip_message_rx_read_advanced(struct ip_message *msg_hander, uint8_t **out_da
             if(size == 0)
                 break;
         }
-        return write_data_ptr - out_standby_buffer;
+        return (int)(write_data_ptr - out_standby_buffer);
     }
     
 

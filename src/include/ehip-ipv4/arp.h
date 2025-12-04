@@ -81,7 +81,7 @@ extern struct arp_entry _arp_table[];
  */
 EH_EXTERN_SIGNAL(signal_arp_table_changed);
 
-static inline unsigned int arp_hdr_len(const ehip_netdev_t *dev)
+static inline unsigned long arp_hdr_len(const ehip_netdev_t *dev)
 {
 	return sizeof(struct arp_hdr) + ((size_t)dev->attr.hw_addr_len + sizeof(uint32_t)) * 2;
 }
