@@ -25,6 +25,8 @@ target_sources(ehip PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/ping.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/udp.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/tcp.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/port_alloc.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/ehip-protocol/dns.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip_chksum.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-netdev/loopback_default_dev.c"
 )

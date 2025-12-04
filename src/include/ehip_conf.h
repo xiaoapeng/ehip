@@ -159,5 +159,15 @@
 #define EHIP_MAX_PACKET_PROCESS_NUM                             4U
 #endif
 
+/* DNS服务器最大数量 */
+#ifndef EHIP_DNS_MAX_SERVER_COUNT
+#define EHIP_DNS_MAX_SERVER_COUNT                               4U
+#endif
+
+/* DNS缓存表最大数量 */
+#ifndef EHIP_DNS_MAX_TABLE_ENTRY_COUNT
+#define EHIP_DNS_MAX_TABLE_ENTRY_COUNT                          16U
+#endif
+
 
 #endif // _EHIP_CONF_H_
