@@ -450,7 +450,6 @@ static int dns_udp_sender_mkquery(udp_pcb_t pcb, struct udp_sender *udp_sender, 
     question[m + 1] = (char)(type & 0xff);
     question[m + 2] = (char)(class >> 8);
     question[m + 3] = (char)(class & 0xff);
-    eh_debugfl("dns query |%.*hhq|", pack_size, dns_hdr);
     return 0;
 }
 
