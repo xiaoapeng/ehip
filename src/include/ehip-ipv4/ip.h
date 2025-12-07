@@ -255,7 +255,13 @@ static inline bool ipv4_is_class_d(ipv4_addr_t addr)
     return (addr & eh_hton32(0xf0000000)) == eh_hton32(0xe0000000);
 }
 
-
+/**
+ * @brief                       将IP地址字符串转换为IP地址
+ * @param  str                  IP地址字符串
+ * @param  dest                 输出IP地址
+ * @return int                  成功返回0 失败返回 EH_RET_INVALID_PARAM
+ */
+extern int ipv4_string_to_addr(const char *s0, ipv4_addr_t *dest);
 
 /**
  * @brief                       判断IP地址是否为该设备的有效地址

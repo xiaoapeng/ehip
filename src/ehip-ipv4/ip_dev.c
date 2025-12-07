@@ -8,6 +8,8 @@
  * 
  */
  
+#include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 #include <eh_formatio.h>
 #include <eh_list.h>
@@ -23,6 +25,47 @@ static uint8_t ipv4_addr_default_mask_len(ipv4_addr_t addr){
         ipv4_is_class_b(addr) ? IPV4_ADDR_DEFAULT_CLASS_B_MASK_LEN : 
         ipv4_is_class_c(addr) ? IPV4_ADDR_DEFAULT_CLASS_C_MASK_LEN : 
         IPV4_ADDR_DEFAULT_CLASS_D_MASK_LEN;
+}
+
+int ipv4_string_to_addr(const char *s0, ipv4_addr_t *dest)
+{
+    const char *s = s0;
+    unsigned long a[4] = {0};
+    char *z;
+    int i;
+    uint8_t *d = (uint8_t *)dest;
+
+    /* 解析字段 */
+    for (i = 0; i < 4; i++) {
+        a[i] = strtoul(s, &z, 0);
+        if (z == s || (*z && *z != '.') || !isdigit((unsigned char)*s))
+            return EH_RET_INVALID_PARAM;              // 解析失败
+        if (!*z) break;            // 字符串结束
+        s = z + 1;                 // 跳过 '.'
+    }
+    if (i == 4) return EH_RET_INVALID_PARAM;          // 字段超过 4 个，不合法
+
+    switch (i) {
+    case 0:
+        a[1] = a[0] & 0xffffff;
+        a[0] >>= 24;
+        _fallthrough ;
+    case 1:
+        a[2] = a[1] & 0xffff;
+        a[1] >>= 16;
+        _fallthrough ;
+    case 2:
+        a[3] = a[2] & 0xff;
+        a[2] >>= 8;
+    }
+
+    for (int k = 0; k < 4; k++) {
+        if (a[k] > 255) 
+            return EH_RET_INVALID_PARAM;
+        d[k] = (uint8_t)a[k];
+    }
+
+    return EH_RET_OK;
 }
 
 bool ipv4_netdev_is_ipv4_addr_valid(const struct ipv4_netdev* ipv4_dev, ipv4_addr_t ipv4_addr){
