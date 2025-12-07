@@ -537,7 +537,7 @@ static void slot_function_timer_500ms(eh_event_t *e, void *arg){
     (void)e;
     struct tcp_pcb *pcb = (struct tcp_pcb *)arg;
     if(pcb->state != TCP_STATE_ESTABLISHED && pcb->state != TCP_STATE_CLOSE_WAIT){
-        eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+        eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
         return ;
     }
     do{
@@ -646,7 +646,7 @@ static int tcp_start_simple_timer(struct tcp_pcb *pcb, eh_signal_base_t *timer_s
 
 
 static void tcp_stop_simple_timer(struct tcp_pcb *pcb){
-    eh_signal_slot_disconnect_from_main(pcb->timer_signal_type, &pcb->slot_timer_timeout );
+    eh_signal_slot_disconnect(pcb->timer_signal_type, &pcb->slot_timer_timeout );
     pcb->timer_signal_type = NULL;
 }
 
@@ -1870,7 +1870,7 @@ static bool tcp_close(struct tcp_pcb *pcb, bool is_user_close){
             return false;
     }
 
-    eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+    eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
     
     key = (struct tcp_hash_key*)eh_hashtbl_node_key(pcb->node);
     eh_mdebugfl(TCP_CLOSE, IPV4_FORMATIO":%d <->"IPV4_FORMATIO":%d close....", 
@@ -1879,7 +1879,7 @@ static bool tcp_close(struct tcp_pcb *pcb, bool is_user_close){
     tcp_stop_simple_timer(pcb);
     eh_timer_stop(eh_signal_to_custom_event(&pcb->signal_timer_rto));
 
-    eh_signal_slot_disconnect_from_main(&pcb->signal_timer_rto, &pcb->slot_timer_rto_timeout );
+    eh_signal_slot_disconnect(&pcb->signal_timer_rto, &pcb->slot_timer_rto_timeout );
     tcp_close_tx(pcb);
     tcp_close_rx(pcb);
     eh_hashtbl_node_delete(NULL, pcb->node);
@@ -1910,7 +1910,7 @@ static int tcp_common_recv_pre_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack
             * 迁移到 TCP_STATE_CLOSED
             */
             if(pcb->state == TCP_STATE_ESTABLISHED || pcb->state == TCP_STATE_CLOSE_WAIT){
-                eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+                eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
             }
             eh_mdebugfl(TCP_INPUT, "recv rst, migrate to TCP_STATE_CLOSED");
             tcp_interior_try_close(pcb, TCP_RECV_RST);
@@ -2249,7 +2249,7 @@ static void tcp_syn_recv_or_established_recv_dispose(struct tcp_pcb *pcb, struct
         if(tcp_pcb_is_tx_channel_idle(pcb)){
             eh_timer_stop(eh_signal_to_custom_event(&pcb->signal_timer_rto));
             tcp_close_tx(pcb);
-            eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+            eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
             eh_mdebugfl(TCP_INPUT, "tcp syn recv or established state, snd_nxt == snd_una, migrate to TCP_STATE_LAST_ACK");
             tcp_client_send_fin(pcb, TCP_STATE_LAST_ACK);
         }
@@ -2257,7 +2257,7 @@ static void tcp_syn_recv_or_established_recv_dispose(struct tcp_pcb *pcb, struct
         eh_timer_stop(eh_signal_to_custom_event(&pcb->signal_timer_rto));
         /* 用户请求断开连接 */
         tcp_close_tx(pcb);
-        eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+        eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
         tcp_client_send_fin(pcb, TCP_STATE_FIN_WAIT_1);
     }
 
@@ -2397,7 +2397,7 @@ static void tcp_close_wait_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pac
 
     if(tcp_pcb_is_tx_channel_idle(pcb)){
         tcp_close_tx(pcb);
-        eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+        eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
         tcp_client_send_fin(pcb, TCP_STATE_LAST_ACK);
         pcb->need_ack = 0;
     }
@@ -2772,7 +2772,7 @@ int ehip_tcp_client_disconnect(tcp_pcb_t _pcb){
     if(!tcp_pcb_is_tx_channel_idle(pcb))
         return 0;
     tcp_close_tx(pcb);
-    eh_signal_slot_disconnect_from_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
+    eh_signal_slot_disconnect(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout);
     tcp_client_send_fin(pcb, TCP_STATE_FIN_WAIT_1);
     return 0;
 }

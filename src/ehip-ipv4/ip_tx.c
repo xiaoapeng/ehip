@@ -212,7 +212,7 @@ int __init ip_tx_init(void){
 void __exit ip_tx_exit(void){
     int i;
     struct arp_query_pcb *ptr;
-    eh_signal_slot_disconnect_from_main(&signal_arp_table_changed, &slot_arp_table_changed);
+    eh_signal_slot_disconnect(&signal_arp_table_changed, &slot_arp_table_changed);
     eh_mem_pool_for_each(i, arp_query_pool, ptr){
         if(eh_mem_pool_idx_is_used(arp_query_pool, i)){
             ip_message_free(((struct arp_query_pcb *)ptr)->ip_msg);

@@ -633,7 +633,7 @@ static void __exit dns_exit(void){
         s_udp_pcb = NULL;
     }
     
-    eh_signal_slot_disconnect_from_main(&signal_ehip_timer_1s, &slot_timer);
+    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
 }
 
 ehip_app_protocol_module_export(dns_init, dns_exit);

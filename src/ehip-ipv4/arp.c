@@ -568,7 +568,7 @@ static int __init arp_protocol_parser_init(void){
 
 static void __exit arp_protocol_parser_exit(void){
     ehip_protocol_handle_unregister(&arp_protocol_handle);
-    eh_signal_slot_disconnect_from_main(&signal_ehip_timer_1s, &slot_timer);
+    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
 }
 
 static int __init arp_init(void){

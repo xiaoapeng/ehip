@@ -35,7 +35,7 @@ uint32_t _route_trait_value = 0;
 EH_DEFINE_SIGNAL(sig_route_changed);
 
 static void _ehip_ipv4_route_delete(struct route_table_entry *entry){
-    eh_signal_slot_disconnect_from_main(&sig_route_changed, &entry->slot_netdev_status_change);
+    eh_signal_slot_disconnect(&entry->route.netdev->signal_status, &entry->slot_netdev_status_change);
     eh_list_del(&entry->node);
     eh_free(entry);
     route_cnt--;
