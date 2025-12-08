@@ -16,11 +16,28 @@
 #include <ehip_buffer.h>
 #include <ehip_netdev.h>
 #include <ehip_netdev_tool.h>
+#include <ehip_netdev_trait.h>
+#include <ehip-ipv4/route.h>
+#include <ehip-ipv4/ip.h>
 #include <ehip-mac/loopback.h>
 ehip_netdev_t *_lo_netdev;
 
+#define LOOPBACK_DEFAULT_IPV4_ADDR ipv4_make_addr(127, 0, 0, 1)
+#define LOOPBACK_DEFAULT_IPV4_MASK_LEN 8
+
 static int loopback_default_up(ehip_netdev_t *netdev){
+    struct ipv4_netdev* ipv4_netdev;
+    struct route_info loopback_default_route_info = {
+        .dst_addr = ipv4_make_addr(127, 0, 0, 1),
+        .gateway = ipv4_make_addr(0, 0, 0, 0),
+        .metric = 0,
+        .mask_len = LOOPBACK_DEFAULT_IPV4_MASK_LEN,
+        .netdev = netdev,
+    };
     ehip_netdev_set_link_status(netdev, true);
+    ipv4_netdev = ehip_netdev_trait_ipv4_dev(netdev);
+    ipv4_netdev_set_main_addr(ipv4_netdev, LOOPBACK_DEFAULT_IPV4_ADDR, LOOPBACK_DEFAULT_IPV4_MASK_LEN);
+    ipv4_route_add(&loopback_default_route_info);
     return 0;
 }
 
