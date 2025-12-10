@@ -223,8 +223,9 @@ error:
 
 static int arp_request_dst(ehip_netdev_t *netdev, ipv4_addr_t ipv4_addr, const ehip_hw_addr_t *target_hw_addr){
     if(netdev == NULL) return EH_RET_INVALID_PARAM;
-    /* 进行发送报文进行ARP查询 */
-    ipv4_addr_t s_ipv4_addr = ipv4_netdev_get_addr(ehip_netdev_trait_ipv4_dev(netdev));
+    struct ipv4_netdev* ipv4_dev = ehip_netdev_trait_ipv4_dev(netdev);
+    int best_ip_idx = ipv4_netdev_get_best_ipv4_addr_idx(ipv4_dev, ipv4_addr);
+    ipv4_addr_t s_ipv4_addr = ipv4_netdev_get_ipv4_addr_by_idx(ipv4_dev, best_ip_idx);
     if(ipv4_is_zeronet(s_ipv4_addr)){
         return EH_RET_INVALID_STATE;
     }
