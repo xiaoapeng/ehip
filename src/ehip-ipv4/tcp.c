@@ -2084,12 +2084,6 @@ static void tcp_client_recv_data_auto_ack(struct tcp_pcb *pcb, struct tcp_recv_p
     }
 }
 
-static inline bool tcp_client_later_recv_is_fin(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
-    const struct tcp_hdr *hdr;
-    hdr = recv_pack_info->hdr;
-    return recv_pack_info->hdr->fin && (eh_ntoh32(hdr->seq) + recv_pack_info->data_len) == (pcb->rcv_nxt - 1);
-}
-
 static void tcp_closed_recv_dispose(struct tcp_pcb *pcb, struct tcp_recv_pack_info *recv_pack_info){
     (void)pcb;
     (void)recv_pack_info;
