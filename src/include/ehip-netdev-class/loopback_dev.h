@@ -13,25 +13,23 @@
 #include <ehip-ipv4/ip.h>
 #include <ehip_netdev_trait.h>
 
- #ifdef __cplusplus
- #if __cplusplus
- extern "C"{
- #endif
- #endif /* __cplusplus */
- 
+#ifdef __cplusplus
+#if __cplusplus
+extern "C"{
+#endif
+#endif /* __cplusplus */
+
 struct loopback_trait{
     struct ipv4_netdev ipv4_netdev;
 };
- 
 
 ehip_netdev_trait_static_assert(struct loopback_trait);
- 
- 
- #ifdef __cplusplus
- #if __cplusplus
- }
- #endif
- #endif /* __cplusplus */
- 
- 
- #endif // _LOOPBACK_DEV_H_
+
+#ifdef __cplusplus
+#if __cplusplus
+}
+#endif
+#endif /* __cplusplus */
+
+
+#endif // _LOOPBACK_DEV_H_
