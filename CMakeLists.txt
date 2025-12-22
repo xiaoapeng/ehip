@@ -10,6 +10,7 @@ target_sources(ehip PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip_protocol_handle.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-netdev-class/loopback_dev.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-netdev-class/ethernet_dev.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/ehip-netdev-class/tun_dev.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-mac/ethernet.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-mac/ethernet_v2.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/ehip-ipv4/arp.c"

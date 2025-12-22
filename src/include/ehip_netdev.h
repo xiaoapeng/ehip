@@ -77,6 +77,7 @@ struct ehip_netdev_param{
     char                    *name;
     struct ehip_netdev_ops  *ops;
     void                    *userdata;
+    void                    *trait_param;
     uint16_t                 net_max_frame_size;
 };
 
