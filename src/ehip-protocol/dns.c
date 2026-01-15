@@ -493,7 +493,7 @@ static int _ehip_dns_query_async(int idx, const char *dname, size_t l){
             eh_mwarnfl(DNS, "dns server %d udp send fail %d", i, ret);
             continue;
         }
-        entry->query_server_map |= (1U << i);
+        entry->query_server_map |= (uint8_t)(1U << i);
         send_cnt ++;
     }
     if(send_cnt == 0){
