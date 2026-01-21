@@ -12,6 +12,7 @@
 
 #include <eh_debug.h>
 #include <eh_swab.h>
+#include <eh_comp_timer.h>
 #include <ehip_core.h>
 #include <ehip_buffer.h>
 #include <ehip_chksum.h>
@@ -291,9 +292,9 @@ static struct ehip_protocol_handle ip_protocol_handle = {
 
 static int __init ip_protocol_parser_init(void){
     int ret;
-    ret = eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer);
+    ret = eh_signal_slot_connect_to_main(&signal_eh_comp_timer_1s, &slot_timer);
     if(ret < 0){
-        eh_merrfl(IP_INPUT, "eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer) = %d", ret);
+        eh_merrfl(IP_INPUT, "eh_signal_slot_connect_to_main(&signal_eh_comp_timer_1s, &slot_timer) = %d", ret);
         return ret;
     }
     return ehip_protocol_handle_register(&ip_protocol_handle);
@@ -301,7 +302,7 @@ static int __init ip_protocol_parser_init(void){
 
 static void __exit ip_protocol_parser_exit(void){
     ip_fragment_clean();
-    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
+    eh_signal_slot_disconnect(&signal_eh_comp_timer_1s, &slot_timer);
     ehip_protocol_handle_unregister(&ip_protocol_handle);
 }
 

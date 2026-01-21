@@ -25,6 +25,7 @@
 #include <eh_hashtbl.h>
 #include <eh_mem.h>
 #include <eh_swab.h>
+#include <eh_comp_timer.h>
 #include <ehip_error.h>
 #include <ehip_buffer.h>
 #include <ehip_chksum.h>
@@ -40,24 +41,24 @@
 #include <ehip-ipv4/ip_tx.h>
 #include <ehip-ipv4/port_alloc.h>
 
-#define TCP_TIMEOUT_500MS_TIMER             ((&signal_ehip_timer_500ms))
+#define TCP_TIMEOUT_500MS_TIMER             ((&signal_eh_comp_timer_500ms))
 
 #define TCP_MSS_MIN_SIZE                    536U
 #define TCP_TIMEOUT_CONNECT_DOWNCNT         2 /* 500ms-1000ms 之间*/
 #define TCP_TIMEOUT_CONNECT_RETRY           6
-#define TCP_TIMEOUT_CONNECT_SIGNAL          ((&signal_ehip_timer_500ms))
+#define TCP_TIMEOUT_CONNECT_SIGNAL          ((&signal_eh_comp_timer_500ms))
 
 #define TCP_TIMEOUT_RETRANSMIT_FIN_DOWNCNT  2
 #define TCP_TIMEOUT_RETRANSMIT_FIN_RETRY    6
-#define TCP_TIMEOUT_RETRANSMIT_FIN_SIGNAL   ((&signal_ehip_timer_500ms))
+#define TCP_TIMEOUT_RETRANSMIT_FIN_SIGNAL   ((&signal_eh_comp_timer_500ms))
 
 #define TCP_TIMEOUT_DELAY_ACK_DOWNCNT       1 /* 0ms-100ms之间 */
 #define TCP_TIMEOUT_DELAY_ACK_RETRY         0
-#define TCP_TIMEOUT_DELAY_ACK_SIGNAL         ((&signal_ehip_timer_100ms))
+#define TCP_TIMEOUT_DELAY_ACK_SIGNAL         ((&signal_eh_comp_timer_100ms))
 
 #define TCP_TIMEOUT_TIME_WAIT_DOWNCNT       120
 #define TCP_TIMEOUT_TIME_WAIT_RETRY         0
-#define TCP_TIMEOUT_TIME_WAIT_SIGNAL        ((&signal_ehip_timer_1s))
+#define TCP_TIMEOUT_TIME_WAIT_SIGNAL        ((&signal_eh_comp_timer_1s))
 
 #define TCP_DELAY_ACK_TIMEOUT              200      /* 延迟ACK超时 x ms */
 #define TCP_TX_SACK_MAX_SACK_CNT           3        /* sack最大就3个即可，超过该数会超出最大TCP头大小 */

@@ -14,6 +14,7 @@
 #include <eh_mem.h>
 #include <eh_error.h>
 #include <eh_signal.h>
+#include <eh_comp_timer.h>
 #include <ehip_conf.h>
 #include <ehip_core.h>
 #include <ehip_module.h>
@@ -619,7 +620,7 @@ int ehip_dns_set_server(ipv4_addr_t *server, size_t server_count){
 
 static int __init dns_init(void){
     memset(&s_dns_table, 0, sizeof(s_dns_table));
-    eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer);
+    eh_signal_slot_connect_to_main(&signal_eh_comp_timer_1s, &slot_timer);
     eh_signal_init(&signal_dns_table_changed);
     return 0;
 }
@@ -633,7 +634,7 @@ static void __exit dns_exit(void){
         s_udp_pcb = NULL;
     }
     
-    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
+    eh_signal_slot_disconnect(&signal_eh_comp_timer_1s, &slot_timer);
 }
 
 ehip_app_protocol_module_export(dns_init, dns_exit);

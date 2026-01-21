@@ -11,11 +11,6 @@
 #ifndef _EHIP_CORE_H_
 #define _EHIP_CORE_H_
 
-#include <eh.h>
-#include <eh_types.h>
-#include <eh_event.h>
-#include <eh_signal.h>
-#include <eh_timer.h>
 #include <ehip_buffer.h>
 
 #ifdef __cplusplus
@@ -23,13 +18,6 @@
 extern "C"{
 #endif
 #endif /* __cplusplus */
-
-
-EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_1s, eh_event_timer_t);
-EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_500ms, eh_event_timer_t);
-EH_EXTERN_CUSTOM_SIGNAL(signal_ehip_timer_100ms, eh_event_timer_t);
-
-
 
 extern int  _ehip_core_netdev_init(ehip_netdev_t *netdev);
 extern void _ehip_core_netdev_exit(ehip_netdev_t *netdev);

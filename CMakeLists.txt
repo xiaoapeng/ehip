@@ -33,4 +33,4 @@ target_sources(ehip PRIVATE
 )
 
 target_include_directories(ehip PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src/include/")
-target_link_libraries(ehip PRIVATE eventhub)
+target_link_libraries(ehip PRIVATE eventhub eventhub-components)

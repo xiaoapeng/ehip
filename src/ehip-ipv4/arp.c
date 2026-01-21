@@ -21,6 +21,7 @@
 #include <eh_swab.h>
 #include <eh_signal.h>
 #include <eh_timer.h>
+#include <eh_comp_timer.h>
 #include <ehip_core.h>
 #include <ehip_netdev.h>
 #include <ehip_module.h>
@@ -561,7 +562,7 @@ static struct ehip_protocol_handle arp_protocol_handle = {
 
 static int __init arp_protocol_parser_init(void){
     int ret;
-    ret = eh_signal_slot_connect_to_main(&signal_ehip_timer_1s, &slot_timer);
+    ret = eh_signal_slot_connect_to_main(&signal_eh_comp_timer_1s, &slot_timer);
     if(ret < 0)
         return ret;
     return ehip_protocol_handle_register(&arp_protocol_handle);
@@ -569,7 +570,7 @@ static int __init arp_protocol_parser_init(void){
 
 static void __exit arp_protocol_parser_exit(void){
     ehip_protocol_handle_unregister(&arp_protocol_handle);
-    eh_signal_slot_disconnect(&signal_ehip_timer_1s, &slot_timer);
+    eh_signal_slot_disconnect(&signal_eh_comp_timer_1s, &slot_timer);
 }
 
 static int __init arp_init(void){
