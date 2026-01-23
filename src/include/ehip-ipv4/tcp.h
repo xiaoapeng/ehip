@@ -160,7 +160,8 @@ extern tcp_server_pcb_t ehip_tcp_server_new(ipv4_addr_t bind_addr, uint16_be_t b
 extern tcp_server_pcb_t ehip_tcp_server_any_new(uint16_be_t bind_port, uint16_t rx_buf_size, uint16_t tx_buf_size);
 extern void ehip_tcp_server_delete(tcp_server_pcb_t pcb);
 extern int ehip_tcp_server_listen(tcp_server_pcb_t pcb);
-extern void ehip_tcp_server_set_new_connect_callback(tcp_server_pcb_t pcb, void (*new_connect)(tcp_pcb_t new_client));
+extern void ehip_tcp_server_set_new_connect_callback(tcp_server_pcb_t _pcb, 
+    void (*new_connect)(tcp_server_pcb_t server_pcb, tcp_pcb_t new_client));
 
 
 #ifdef __cplusplus

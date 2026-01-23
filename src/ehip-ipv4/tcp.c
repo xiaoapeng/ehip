@@ -231,7 +231,7 @@ struct tcp_pcb{
 };
 
 struct tcp_server_base_opt{
-    void (*new_connect)(tcp_pcb_t new_client);
+    void (*new_connect)(tcp_server_pcb_t server_pcb, tcp_pcb_t new_client);
 };
 
 struct tcp_server_pcb{
@@ -2524,7 +2524,7 @@ static void server_new_connect_change_callback(tcp_pcb_t _pcb, enum tcp_event st
         ehip_tcp_client_set_userdata(_pcb, NULL);
         ehip_tcp_set_events_callback(_pcb, NULL);
         if(server_pcb->opt.new_connect)
-            server_pcb->opt.new_connect(_pcb);
+            server_pcb->opt.new_connect((tcp_server_pcb_t)server_pcb, (tcp_pcb_t)pcb);
         tcp_client_events_callback(pcb, TCP_CONNECTED);
     }
 }
@@ -2871,7 +2871,8 @@ int ehip_tcp_server_listen(tcp_server_pcb_t _pcb){
 }
 
 
-void ehip_tcp_server_set_new_connect_callback(tcp_server_pcb_t _pcb, void (*new_connect)(tcp_pcb_t new_client)){
+void ehip_tcp_server_set_new_connect_callback(tcp_server_pcb_t _pcb, 
+    void (*new_connect)(tcp_server_pcb_t server_pcb, tcp_pcb_t new_client)){
     struct tcp_server_pcb *pcb = (struct tcp_server_pcb *)_pcb;
     pcb->opt.new_connect = new_connect;
 }
