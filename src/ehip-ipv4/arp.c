@@ -34,8 +34,8 @@
 #include <ehip-ipv4/arp.h>
 #include <ehip-ipv4/ip.h>
 
-#ifndef EH_DBG_MODEULE_LEVEL_ARP
-#define EH_DBG_MODEULE_LEVEL_ARP EH_DBG_WARNING
+#ifndef EH_DBG_MODULE_LEVEL_ARP
+#define EH_DBG_MODULE_LEVEL_ARP EH_DBG_WARNING
 #endif
 
 EH_DEFINE_SIGNAL(signal_arp_table_changed);

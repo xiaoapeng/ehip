@@ -78,8 +78,8 @@ struct dns_entry_private {
 #define DNS_QUERY_RETRY_COUNT       5U
 #define DNS_MAX_LABEL_LEN           (63)
 
-#ifndef EH_DBG_MODEULE_LEVEL_DNS 
-#define EH_DBG_MODEULE_LEVEL_DNS EH_DBG_INFO
+#ifndef EH_DBG_MODULE_LEVEL_DNS 
+#define EH_DBG_MODULE_LEVEL_DNS EH_DBG_INFO
 #endif
 
 eh_static_assert(EHIP_DNS_MAX_SERVER_COUNT < 8, "EHIP_DNS_MAX_SERVER_COUNT must be less than 8");
