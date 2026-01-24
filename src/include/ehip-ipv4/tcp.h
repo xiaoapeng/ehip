@@ -109,6 +109,12 @@ typedef struct tcp_client_info{
     ehip_netdev_t   *netdev;
 }tcp_client_info_t;
 
+typedef enum tcp_update{
+    TCP_SNED = 1,
+    TCP_WINDOWS_CHANGE = 2,
+    TCP_RECV = TCP_WINDOWS_CHANGE,
+}tcp_update_t;
+
 /**
  * @brief                   tcp服务端创建
  * @param  bind_addr        绑定地址
@@ -151,7 +157,12 @@ extern void *ehip_tcp_client_get_userdata(tcp_pcb_t pcb);
 extern eh_ringbuf_t *ehip_tcp_client_get_send_ringbuf(tcp_pcb_t pcb);
 extern eh_ringbuf_t *ehip_tcp_client_get_recv_ringbuf(tcp_pcb_t pcb);
 
-extern int ehip_tcp_client_request_send(tcp_pcb_t pcb);
+
+extern int ehip_tcp_client_request_update(tcp_pcb_t pcb, tcp_update_t update_type);
+static inline int ehip_tcp_client_request_send(tcp_pcb_t pcb){
+    return ehip_tcp_client_request_update(pcb, TCP_SNED);
+}
+
 extern void tcp_keepalive_time_config(tcp_pcb_t pcb, uint16_t *time, uint16_t *intvl, uint8_t *retry_num);
 
 

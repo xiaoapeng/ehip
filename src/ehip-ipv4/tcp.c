@@ -66,7 +66,7 @@
 #define TCP_INIT_RTO                       200
 #define TCP_MAX_RTO                        (1000 * 60)
 #define TCP_MIN_RTO                        (200)
-#define TCP_LAN_MIN_RTO                    (8)
+#define TCP_LAN_MIN_RTO                    (50)
 #define TCP_MAX_RTT                        (1000 * 30)
 #define TCP_INIT_SSTHRESH                  8
 
@@ -94,24 +94,24 @@
 
 #define TCP_FRAGMENT_SEGMENT_MAX_NUM (((EHIP_TCP_FRAGMENT_SEGMENT_MAX_NUM-1) | (0x01U)) & (0xFFU))
 
-#ifndef EH_DBG_MODEULE_LEVEL_TCP_KEEPALIVE_TIMEOUT
-#define EH_DBG_MODEULE_LEVEL_TCP_KEEPALIVE_TIMEOUT EH_DBG_MODEULE_LEVEL_INFO
+#ifndef EH_DBG_MODULE_LEVEL_TCP_KEEPALIVE_TIMEOUT
+#define EH_DBG_MODULE_LEVEL_TCP_KEEPALIVE_TIMEOUT EH_DBG_INFO
 #endif
 
-#ifndef EH_DBG_MODEULE_LEVEL_TCP
-#define EH_DBG_MODEULE_LEVEL_TCP EH_DBG_MODEULE_LEVEL_INFO
+#ifndef EH_DBG_MODULE_LEVEL_TCP
+#define EH_DBG_MODULE_LEVEL_TCP EH_DBG_INFO
 #endif
 
-#ifndef EH_DBG_MODEULE_LEVEL_TCP_CWND
-#define EH_DBG_MODEULE_LEVEL_TCP_CWND EH_DBG_MODEULE_LEVEL_INFO
+#ifndef EH_DBG_MODULE_LEVEL_TCP_CWND
+#define EH_DBG_MODULE_LEVEL_TCP_CWND EH_DBG_INFO
 #endif
 
-#ifndef EH_DBG_MODEULE_LEVEL_TCP_RETRY
-#define EH_DBG_MODEULE_LEVEL_TCP_RETRY EH_DBG_MODEULE_LEVEL_INFO
+#ifndef EH_DBG_MODULE_LEVEL_TCP_RETRY
+#define EH_DBG_MODULE_LEVEL_TCP_RETRY EH_DBG_INFO
 #endif
 
-#ifndef EH_DBG_MODEULE_LEVEL_TCP_RTO_TIMEOUT
-#define EH_DBG_MODEULE_LEVEL_TCP_RTO_TIMEOUT EH_DBG_MODEULE_LEVEL_INFO
+#ifndef EH_DBG_MODULE_LEVEL_TCP_RTO_TIMEOUT
+#define EH_DBG_MODULE_LEVEL_TCP_RTO_TIMEOUT EH_DBG_INFO
 #endif
 
 enum TCP_STATE{
@@ -379,6 +379,7 @@ static tcp_state_recv_dispose tcp_state_recv_dispose_tab[] = {
     [TCP_STATE_LAST_ACK] = tcp_last_ack_recv_dispose,
 };
 
+static const eh_ringbuf_t tcp_null_ringbuf = { 0 };
 
 static int tcp_transmit_syn(struct tcp_pcb *pcb, bool is_syn_ack, uint32_t seq);
 
@@ -684,8 +685,8 @@ static tcp_pcb_t tcp_pcb_base_new(uint16_t config_flags, struct tcp_hash_key *ke
 
     new_pcb->rx_buf_size = rx_buf_size;
     new_pcb->tx_buf_size = tx_buf_size;
-    new_pcb->rx_buf = NULL;
-    new_pcb->tx_buf = NULL;
+    new_pcb->rx_buf = (eh_ringbuf_t*)&tcp_null_ringbuf;
+    new_pcb->tx_buf = (eh_ringbuf_t*)&tcp_null_ringbuf;
     new_pcb->timer_signal_type = NULL;
     eh_signal_slot_init(&new_pcb->slot_timer_timeout, slot_function_timer_timeout, new_pcb);
     eh_signal_slot_init(&new_pcb->slot_timer_rto_timeout, slot_function_timer_rto, new_pcb);
@@ -777,7 +778,7 @@ static void tcp_hdr_fill(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint8_t optio
     hdr->flags = 0;
     hdr->flags |= hdr_flags;
     hdr->doff = ((unsigned int)(eh_align_up(option_len, 4) >> 2) + (unsigned int)(sizeof(struct tcp_hdr) >> 2)) & 0x0F;
-    hdr->window = pcb->rx_buf ? eh_hton16((uint16_t)eh_ringbuf_free_size(pcb->rx_buf)) : 0;
+    hdr->window = eh_hton16((uint16_t)eh_ringbuf_free_size(pcb->rx_buf));
     hdr->check = 0;
     hdr->urg_ptr = 0;
 }
@@ -856,7 +857,10 @@ static int tcp_transmit_ctrl(struct tcp_pcb *pcb, uint16_t flags, uint32_t seq){
     ret = ip_message_tx_ready(ip_msg, NULL);
     if(ret < 0)
         goto ip_message_tx_ready_error;
-    return ip_tx(netdev, ip_msg, &pcb->arp_idx_cache, pcb->gw_addr);
+    ret = ip_tx(netdev, ip_msg, &pcb->arp_idx_cache, pcb->gw_addr);
+    if(ret == 0 && pcb->rx_win_full && flags & TCP_FLAG_ACK && eh_ringbuf_free_size(pcb->rx_buf))
+        pcb->rx_win_full = 0;
+    return ret;
 ip_message_tx_ready_error:
     ip_message_free(ip_msg);
     return ret;
@@ -895,7 +899,11 @@ static int tcp_transmit_msg(struct tcp_pcb *pcb, const struct tcp_send_option_in
     if(ret < 0)
         goto ip_message_tx_ready_error;
     pcb->departure_time = (uint16_t)info->now_ms;
-    ip_tx(netdev, ip_msg, &pcb->arp_idx_cache, pcb->gw_addr);
+    ret = ip_tx(netdev, ip_msg, &pcb->arp_idx_cache, pcb->gw_addr);
+    if(ret < 0)
+        return ret;
+    if(pcb->rx_win_full && flags & TCP_FLAG_ACK && eh_ringbuf_free_size(pcb->rx_buf))
+        pcb->rx_win_full = 0;
     return payload_size;
 ip_message_tx_ready_error:
     ip_message_free(ip_msg);
@@ -1190,7 +1198,7 @@ static int tcp_recv_rst(struct tcp_pcb *pcb, struct tcp_recv_pack_info *pack_inf
     if(pack_info->data_len > 0)
         return TCP_RECV_RST_RET_DROP;
     /* 如果在窗口内，那么应该回一个ACK，否则也应该丢弃 */
-    if(pcb->rx_buf)
+    if(pcb->rx_buf != &tcp_null_ringbuf)
         win_limit = pcb->rcv_nxt + (uint32_t)eh_ringbuf_free_size(pcb->rx_buf);
     else
         win_limit = pcb->rcv_nxt + pcb->rx_buf_size;
@@ -1821,22 +1829,22 @@ static void tcp_client_auto_send(struct tcp_pcb *pcb, const struct tcp_option_sa
 
 
 static void tcp_close_tx(struct tcp_pcb *pcb){
-    if(pcb->tx_buf){
+    if(pcb->tx_buf != &tcp_null_ringbuf){
         eh_ringbuf_destroy(pcb->tx_buf);
-        pcb->tx_buf = NULL;
+        pcb->tx_buf = (eh_ringbuf_t*)&tcp_null_ringbuf;
     }
 }
 
 static void tcp_close_rx(struct tcp_pcb *pcb){
-    if(pcb->rx_buf){
+    if(pcb->rx_buf != &tcp_null_ringbuf){
         eh_ringbuf_destroy(pcb->rx_buf);
-        pcb->rx_buf = NULL;
+        pcb->rx_buf = (eh_ringbuf_t*)&tcp_null_ringbuf;
     }
 }
 
 static int tcp_open_tx(struct tcp_pcb *pcb){
     eh_ringbuf_t* buf;
-    if(pcb->tx_buf)
+    if(pcb->tx_buf != &tcp_null_ringbuf)
         return 0;
     buf = eh_ringbuf_create(pcb->tx_buf_size, NULL);
     if(eh_ptr_to_error(buf) < 0)
@@ -1847,7 +1855,7 @@ static int tcp_open_tx(struct tcp_pcb *pcb){
 
 static int tcp_open_rx(struct tcp_pcb *pcb){
     eh_ringbuf_t* buf;
-    if(pcb->rx_buf)
+    if(pcb->rx_buf != &tcp_null_ringbuf)
         return 0;
     buf = eh_ringbuf_create(pcb->rx_buf_size, NULL);
     if(eh_ptr_to_error(buf) < 0)
@@ -2674,19 +2682,29 @@ drop:
     return ;
 }
 
-int ehip_tcp_client_request_send(tcp_pcb_t _pcb){
+
+int ehip_tcp_client_request_update(tcp_pcb_t _pcb, tcp_update_t update_type){
     struct tcp_pcb *pcb = (struct tcp_pcb *)_pcb;
+    if((update_type & (TCP_WINDOWS_CHANGE|TCP_SNED)) == 0){
+        return EH_RET_INVALID_PARAM;
+    }
     /* 检查是否处于可进行数据发送的状态 */
     if(pcb->state != TCP_STATE_ESTABLISHED && pcb->state != TCP_STATE_CLOSE_WAIT)
         return EH_RET_INVALID_STATE;
     
-    pcb->user_req_transmit = 1;
+    if(update_type & TCP_SNED)
+        pcb->user_req_transmit = 1;
 
     if(pcb->later_transmit || pcb->retransmit || pcb->sack_retransmit){
         return 0;
     }
-    return tcp_client_data_send(pcb);
+    if(update_type & TCP_SNED)
+        return tcp_client_data_send(pcb);
+    if(pcb->rx_win_full && eh_ringbuf_free_size(pcb->rx_buf))
+        return tcp_transmit_ctrl(pcb, TCP_FLAG_ACK, pcb->snd_nxt);
+    return 0;
 }
+
 
 tcp_pcb_t ehip_tcp_client_new(ipv4_addr_t bind_addr, uint16_be_t bind_port, 
     ehip_netdev_t *netdev, ipv4_addr_t dst_addr, uint16_be_t dst_port, uint16_t rx_buf_size, uint16_t tx_buf_size){
@@ -2859,8 +2877,7 @@ tcp_server_pcb_t ehip_tcp_server_any_new(uint16_be_t bind_port, uint16_t rx_buf_
 
 void ehip_tcp_server_delete(tcp_server_pcb_t _pcb){
     struct tcp_server_pcb *pcb = (struct tcp_server_pcb *)_pcb;
-    tcp_pcb_hashtbl_uninstall(pcb->node);
-    eh_hashtbl_node_delete(NULL, pcb->node);
+    eh_hashtbl_node_delete(tcp_hash_tbl, pcb->node);
     eh_free(pcb);
 }
 
@@ -2886,6 +2903,24 @@ static int tcp_init(void){
 }
 
 static void tcp_exit(void){
+    unsigned int tmp_i;
+    struct eh_hashtbl_node *node, *node_tmp;
+    struct tcp_pcb *pcb;
+    const struct tcp_hash_key *key;
+    eh_hashtbl_for_each_safe(tcp_hash_tbl, node, node_tmp, tmp_i){
+        key = (const struct tcp_hash_key *)eh_hashtbl_node_const_key(node);
+        if(key->local_addr && key->local_port && key->remote_addr && key->remote_port && key->netdev){
+            /* 有完整的5元组，说明是一个TCP连接，我们只处理TCP内部连接状态，用户的内存泄漏，就让它泄漏吧，那是用户的责任 */
+            pcb = ((struct tcp_hash_value *)eh_hashtbl_node_value(node))->pcb;
+            if(tcp_close(pcb, false) == false){
+                eh_mwarnfl(TCP, "tcp connect: "IPV4_FORMATIO":%d <->"IPV4_FORMATIO":%d is not close....", 
+                    ipv4_formatio(key->local_addr), eh_ntoh16(key->local_port),
+                    ipv4_formatio(key->remote_addr), eh_ntoh16(key->remote_port));
+            }
+        }else{
+            eh_mwarnfl(TCP, "tcp server: "IPV4_FORMATIO":%d no release", ipv4_formatio(key->local_addr), eh_ntoh16(key->local_port));
+        }
+    }
     eh_hashtbl_destroy(tcp_hash_tbl);
 }
 
