@@ -62,6 +62,7 @@ static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_s
     buf->buffer_ref = buf_ref;
     buf->payload_pos = head_reserved_size_or_0;
     buf->payload_tail = head_reserved_size_or_0;
+    eh_llist_node_init(&buf->node);
     buf->flags = 0;
     buf_ref->buffer = buffer_raw_ptr;
     buf_ref->ref_cnt = 1;
@@ -138,16 +139,22 @@ ehip_buffer_t* ehip_buffer_dup(ehip_buffer_t* src){
     return new_buffer;
 }
 
-ehip_buffer_t* ehip_buffer_ref_dup(ehip_buffer_t* buf){
+ehip_buffer_t* ehip_buffer_ref_dup(ehip_buffer_t* src){
     ehip_buffer_t* new_buffer;
     
-    if(buf->buffer_ref->ref_cnt == EHIP_BUFFER_REF_MAX_NUM)
+    if(src->buffer_ref->ref_cnt == EHIP_BUFFER_REF_MAX_NUM)
         return eh_error_to_ptr(EH_RET_INVALID_STATE);
     new_buffer = eh_mem_pool_alloc(pool_ehip_buffer);
     if(new_buffer == NULL)
         return eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
-    buf->buffer_ref->ref_cnt++;
-    *new_buffer = *buf;
+    src->buffer_ref->ref_cnt++;
+    new_buffer->buffer_ref = src->buffer_ref;
+    new_buffer->payload_pos = src->payload_pos;
+    new_buffer->payload_tail = src->payload_tail;
+    eh_llist_node_init(&new_buffer->node);
+    new_buffer->protocol = src->protocol;
+    new_buffer->netdev = src->netdev;
+    new_buffer->flags = src->flags;
     return new_buffer;
 }
 

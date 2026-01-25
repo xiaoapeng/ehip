@@ -16,6 +16,7 @@
 
 #include <eh_types.h>
 #include <eh_mem_pool.h>
+#include <eh_llist.h>
 #include <ehip_ptype.h>
 #include <ehip_buffer_type.h>
 
@@ -51,6 +52,7 @@ struct ehip_buffer{
     struct ehip_buffer_ref     *buffer_ref;
     ehip_buffer_size_t          payload_pos;
     ehip_buffer_size_t          payload_tail;
+    struct eh_llist_node        node;
 
     /* 该字段在tx时不进行使用，一般在rx时在每一层被赋值使用 */
     enum ehip_ptype             protocol;
@@ -100,6 +102,11 @@ struct ehip_buffer{
  */
 #define ehip_buffer_get_payload_end_ptr(buf) (ehip_buffer_get_buffer_ptr(buf) + (buf)->payload_tail)
 
+/**
+ * @brief                   获取buf的链表节点指针
+ * @return                  llist node ptr
+ */
+#define ehip_buffer_get_node(buf) (&(buf)->node)
 
 /**
  * @brief                   获取该buffer类型的内存池句柄

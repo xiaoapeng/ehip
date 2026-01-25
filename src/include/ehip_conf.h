@@ -39,20 +39,6 @@
 #endif
 
 /**
- *  网卡RX 消息句柄数量，单次最多接收的数据包数量
- */
-#ifndef EHIP_CORE_MBOX_NETDEV_RX_MSG_BUFFER_NUM
-#define EHIP_CORE_MBOX_NETDEV_RX_MSG_BUFFER_NUM                 16U
-#endif
-
-/**
- *  网卡TX 消息句柄数量，单次最多可发送的数据包数量
- */
-#ifndef EHIP_CORE_MBOX_NETDEV_TX_MSG_BUFFER_NUM
-#define EHIP_CORE_MBOX_NETDEV_TX_MSG_BUFFER_NUM                 16U
-#endif
-
-/**
  *  IPV4最大支持分配的数据包数量
  */
 #ifndef EHIP_IP_MAX_BUFFER_NUM
