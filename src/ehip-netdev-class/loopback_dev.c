@@ -99,7 +99,7 @@ static int  loopback_dev_trait_hard_header(ehip_netdev_t *netdev, ehip_buffer_t 
     (void)len;
     struct loopback_hdr *netdev_virtual_hw_addr;
 
-    netdev_virtual_hw_addr = (struct loopback_hdr *)ehip_buffer_head_append(buf, sizeof(struct loopback_hdr));
+    netdev_virtual_hw_addr = (struct loopback_hdr *)ehip_buffer_payload_head_append(buf, sizeof(struct loopback_hdr));
     if(netdev_virtual_hw_addr == NULL)
         return EH_RET_INVALID_STATE;
     memcpy(&netdev_virtual_hw_addr->virtual_hw_addr, dst_hw_addr, EHIP_LOOPBACK_HWADDR_LEN);

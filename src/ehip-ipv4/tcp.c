@@ -636,9 +636,16 @@ static inline void tcp_keepalive_timer_reset(struct tcp_pcb *pcb){
 
 static int tcp_start_simple_timer(struct tcp_pcb *pcb, eh_signal_base_t *timer_signal_type, uint8_t timeout_countdown, uint8_t retry_countdown){
     int ret;
-    ret = eh_signal_slot_connect_to_main(timer_signal_type, &pcb->slot_timer_timeout);
-    if(ret < 0)
-        return ret;
+    if(pcb->timer_signal_type && pcb->timer_signal_type != timer_signal_type){
+        eh_signal_slot_disconnect(pcb->timer_signal_type, &pcb->slot_timer_timeout);
+        pcb->timer_signal_type = NULL;
+    }
+    if(pcb->timer_signal_type == NULL){
+        ret = eh_signal_slot_connect_to_main(timer_signal_type, &pcb->slot_timer_timeout);
+        if(ret < 0)
+            return ret;
+    }
+
     pcb->retry_countdown = retry_countdown + 1;
     pcb->timeout_countdown = timeout_countdown;
     pcb->timeout_reload = timeout_countdown;
@@ -734,24 +741,20 @@ static int tcp_route_refresh(struct tcp_pcb *pcb){
 }
 
 
-static inline int tcp_tx_new(struct tcp_pcb *pcb, struct ip_message **ip_msg, ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_size){
+static inline int tcp_tx_new(struct tcp_pcb *pcb, struct ip_message **ip_msg, ehip_buffer_t** out_buffer){
     struct ip_message *new_ip_msg;
     struct tcp_hash_key *key = tcp_pcb_to_key(pcb);
-    ehip_buffer_t *out_buffer_p;
-    ehip_buffer_size_t out_buffer_size_p;
     int ret;
     new_ip_msg = ip_message_tx_new(tcp_pcb_to_netdev(pcb), ipv4_make_tos(0, 0), 
         EHIP_IP_DEFAULT_TTL, IP_PROTO_TCP, key->local_addr, key->remote_addr, NULL, 0, 0, pcb->route_type);
     if(eh_ptr_to_error(new_ip_msg) < 0)
         return eh_ptr_to_error(new_ip_msg);
-    ret = ip_message_tx_add_buffer(new_ip_msg, &out_buffer_p, &out_buffer_size_p);
+    ret = ip_message_tx_add_buffer(new_ip_msg, out_buffer);
     if(ret < 0){
         ip_message_free(new_ip_msg);
         return ret;
     }
     *ip_msg = new_ip_msg;
-    *out_buffer = out_buffer_p;
-    *out_buffer_size = out_buffer_size_p;
     return EH_RET_OK;
 }
 
@@ -840,17 +843,20 @@ static int tcp_transmit_ctrl(struct tcp_pcb *pcb, uint16_t flags, uint32_t seq){
     struct tcp_hdr *tcp_hdr;
     struct ip_message *ip_msg = NULL;
     ehip_buffer_t *buffer = NULL;
-    ehip_buffer_size_t buffer_size = 0;
     ehip_netdev_t *netdev = tcp_pcb_to_netdev(pcb);
     struct tcp_send_option_info option_info;
     int ret;
     
     // eh_mdebugfl(TCP_TX_CTRL, "s:%u a:%u", seq, pcb->rcv_nxt);
-    ret = tcp_tx_new(pcb, &ip_msg, &buffer, &buffer_size);
+    ret = tcp_tx_new(pcb, &ip_msg, &buffer);
     if(ret < 0)
         return ret;
     tcp_option_info_get(pcb, &option_info);
-    tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_append(buffer, (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + option_info.option_len));
+    tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_tail_append(buffer, (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + option_info.option_len));
+    if(tcp_hdr == NULL){
+        ret = EH_RET_INVALID_STATE;
+        goto buffer_error;
+    }
     tcp_tx_send_option_fill(pcb, &option_info, tcp_hdr);
     tcp_hdr_fill(pcb, tcp_hdr, (uint8_t)option_info.option_len, flags, seq, pcb->rcv_nxt);
     tcp_hdr_fill_checksum(pcb, tcp_hdr, (uint8_t)option_info.option_len, 0);
@@ -861,6 +867,7 @@ static int tcp_transmit_ctrl(struct tcp_pcb *pcb, uint16_t flags, uint32_t seq){
     if(ret == 0 && pcb->rx_win_full && flags & TCP_FLAG_ACK && eh_ringbuf_free_size(pcb->rx_buf))
         pcb->rx_win_full = 0;
     return ret;
+buffer_error:
 ip_message_tx_ready_error:
     ip_message_free(ip_msg);
     return ret;
@@ -871,18 +878,17 @@ static int tcp_transmit_msg(struct tcp_pcb *pcb, const struct tcp_send_option_in
     struct tcp_hdr *tcp_hdr;
     struct ip_message *ip_msg = NULL;
     ehip_buffer_t *buffer = NULL;
-    ehip_buffer_size_t buffer_size = 0;
     ehip_netdev_t *netdev = tcp_pcb_to_netdev(pcb);
     void *payload_data;
     int ret;
 
-    ret = tcp_tx_new(pcb, &ip_msg, &buffer, &buffer_size);
+    ret = tcp_tx_new(pcb, &ip_msg, &buffer);
     if(ret < 0)
         return ret;
     if(payload_size != TCP_PAYLOAD_SIZE_ALIVE_FLAG){
-        tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_append(buffer, (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + info->option_len + payload_size));
+        tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_tail_append(buffer, (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + info->option_len + payload_size));
     }else{
-        tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_append(buffer, (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + info->option_len + 1));
+        tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_tail_append(buffer, (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + info->option_len + 1));
     }
     
     tcp_tx_send_option_fill(pcb, info, tcp_hdr);
@@ -914,27 +920,25 @@ static int tcp_transmit_syn(struct tcp_pcb *pcb, bool is_syn_ack, uint32_t seq){
     struct tcp_hdr *tcp_hdr;
     struct ip_message *ip_msg = NULL;
     ehip_buffer_t *buffer;
-    ehip_buffer_size_t buffer_size = 0;
     ehip_netdev_t *netdev = tcp_pcb_to_netdev(pcb);
     int ret;
     struct tcp_option_byte_syn *tcp_option_byte_syn;
     uint32_t now_ms;
 
-    ret = tcp_tx_new(pcb, &ip_msg, &buffer, &buffer_size);
+    ret = tcp_tx_new(pcb, &ip_msg, &buffer);
     if(ret < 0)
         return ret;
-
-    if(buffer_size < (ehip_buffer_size_t)(sizeof(struct tcp_hdr) + sizeof(struct tcp_option_byte_syn))){
+    tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_tail_append(buffer, sizeof(struct tcp_hdr) + sizeof(struct tcp_option_byte_syn));
+    if(tcp_hdr == NULL){
         ret = EH_RET_INVALID_STATE;
         goto buffer_size_too_small;
     }
-    tcp_hdr = (struct tcp_hdr*)ehip_buffer_payload_append(buffer, sizeof(struct tcp_hdr) + sizeof(struct tcp_option_byte_syn));
     tcp_option_byte_syn = (struct tcp_option_byte_syn *)tcp_hdr->options;
 
     /* 告知对方我的MSS */
     tcp_option_byte_syn->kind_mss =  TCP_OPTION_KIND_MSS;
     tcp_option_byte_syn->len_mss_4 = 4;
-    tcp_option_byte_syn->mss = pcb->mss;
+    tcp_option_byte_syn->mss = eh_hton16(pcb->mss);
 
     /* 告知对方我支持 SACK */
     tcp_option_byte_syn->kind_nop_r0 = TCP_OPTION_KIND_NOP;
@@ -1561,7 +1565,6 @@ static void tcp_client_send_fin(struct tcp_pcb *pcb, enum TCP_STATE next_state){
     pcb->state = next_state;
     pcb->fin_sent = 1;
     /* 开定时器 重传FIN定时器 */
-    tcp_stop_simple_timer(pcb);
     tcp_start_simple_timer(pcb, (eh_signal_base_t *)TCP_TIMEOUT_RETRANSMIT_FIN_SIGNAL, TCP_TIMEOUT_RETRANSMIT_FIN_DOWNCNT, TCP_TIMEOUT_RETRANSMIT_FIN_RETRY);
 }
 
@@ -2224,6 +2227,7 @@ static void tcp_syn_recv_or_established_recv_dispose(struct tcp_pcb *pcb, struct
     if(ret > 0 && pcb->state == TCP_STATE_SYN_RECEIVED){
         ret--;
         pcb->state = TCP_STATE_ESTABLISHED;
+        tcp_stop_simple_timer(pcb);
         eh_signal_slot_connect_to_main(TCP_TIMEOUT_500MS_TIMER, &pcb->slot_timer_500ms_timeout );
         tcp_client_events_callback(pcb, TCP_CONNECTED);
     }
@@ -2294,19 +2298,16 @@ static void tcp_fin_wait_1_or_2_recv_dispose(struct tcp_pcb *pcb, struct tcp_rec
             /* 同时收到FIN和ACK ---> 进入 TCP_STATE_TIME_WAIT 状态  */
             pcb->state = TCP_STATE_TIME_WAIT;
             tcp_close_rx(pcb);
-            tcp_stop_simple_timer(pcb);
             tcp_start_simple_timer(pcb, (eh_signal_base_t *)TCP_TIMEOUT_TIME_WAIT_SIGNAL, TCP_TIMEOUT_TIME_WAIT_DOWNCNT, TCP_TIMEOUT_TIME_WAIT_RETRY);
             tcp_client_events_callback(pcb, TCP_DISCONNECTED);
         }else if( recv_pack_info->recv_flags & TCP_RECV_DATA_RET_FIN ){
             /* 收到FIN ---> 进入 TCP_STATE_CLOSING 状态 */
             pcb->state = TCP_STATE_CLOSING;
             tcp_close_rx(pcb);
-            tcp_stop_simple_timer(pcb);
             tcp_start_simple_timer(pcb, (eh_signal_base_t *)TCP_TIMEOUT_RETRANSMIT_FIN_SIGNAL, TCP_TIMEOUT_RETRANSMIT_FIN_DOWNCNT, TCP_TIMEOUT_RETRANSMIT_FIN_RETRY);
         }else if( ret > 0 ){
             /* 收到ACK ---> 进入 TCP_STATE_FIN_WAIT_2 状态 */
             pcb->state = TCP_STATE_FIN_WAIT_2;
-            tcp_stop_simple_timer(pcb);
             tcp_start_simple_timer(pcb, (eh_signal_base_t *)TCP_TIMEOUT_TIME_WAIT_SIGNAL, TCP_TIMEOUT_TIME_WAIT_DOWNCNT, TCP_TIMEOUT_TIME_WAIT_RETRY);
         }
     }else{
@@ -2315,7 +2316,6 @@ static void tcp_fin_wait_1_or_2_recv_dispose(struct tcp_pcb *pcb, struct tcp_rec
             /* 同时收到FIN ---> 进入 TCP_STATE_TIME_WAIT 状态  */
             pcb->state = TCP_STATE_TIME_WAIT;
             tcp_close_rx(pcb);
-            tcp_stop_simple_timer(pcb);
             tcp_start_simple_timer(pcb, (eh_signal_base_t *)TCP_TIMEOUT_TIME_WAIT_SIGNAL, TCP_TIMEOUT_TIME_WAIT_DOWNCNT, TCP_TIMEOUT_TIME_WAIT_RETRY);
             tcp_client_events_callback(pcb, TCP_DISCONNECTED);
         }
@@ -2513,7 +2513,6 @@ static int tcp_connect(struct tcp_pcb *pcb, bool is_client){
         goto error;
     pcb->snd_nxt = pcb->snd_una + 1;
     pcb->state = is_client ? TCP_STATE_SYN_SENT : TCP_STATE_SYN_RECEIVED;
-    tcp_stop_simple_timer(pcb);
     tcp_start_simple_timer(pcb, (eh_signal_base_t *)TCP_TIMEOUT_CONNECT_SIGNAL, TCP_TIMEOUT_CONNECT_DOWNCNT, TCP_TIMEOUT_CONNECT_RETRY);
     return 0;
 error:
@@ -2551,16 +2550,15 @@ void tcp_input(struct ip_message *ip_msg){
     struct tcp_pcb *pcb;
     struct tcp_server_pcb *server_pcb;
     struct tcp_recv_pack_info recv_pack_info;
-
+    input_netdev = ip_message_get_netdev(ip_msg);
     if(ip_message_flag_is_fragment(ip_msg)){
         ehip_buffer_t *first_buf;
         ehip_buffer_t *pos_buffer;
         uint8_t *copy_ptr;
-        int tmp_i;
         ehip_buffer_size_t single_copy_size;
 
         /* 合并分片到 tcp_msg中，方便后续处理 */
-        first_buf = ip_message_rx_fragment_first(ip_msg);
+        first_buf = ip_message_buffer(ip_msg);
         /* 
          * 将rx data和 first_buf的总容量进行对比，因为我们即将从first_buf身上进行dup，
          * 这样便于我们提前知道buf的空间够不够,如果单帧buffer的空间不够，那说明对面TCP设备
@@ -2574,19 +2572,16 @@ void tcp_input(struct ip_message *ip_msg){
         if(eh_ptr_to_error(tcp_msg) < 0){
             goto drop;
         }
-        copy_ptr = ehip_buffer_payload_append(tcp_msg, tcp_data_len);
-        ip_message_tx_fragment_for_each(pos_buffer, tmp_i, ip_msg){
+        copy_ptr = ehip_buffer_payload_tail_append(tcp_msg, tcp_data_len);
+        ip_message_fragment_for_each(pos_buffer, ip_msg){
             single_copy_size = ehip_buffer_get_payload_size(pos_buffer);
             memcpy(copy_ptr, ehip_buffer_get_payload_ptr(pos_buffer), single_copy_size);
             copy_ptr += single_copy_size;
         }
-        input_netdev = first_buf->netdev;
 
     }else{
         ehip_buffer_t *first_buf;
-
-        first_buf = ip_message_first(ip_msg);
-        input_netdev = first_buf->netdev;
+        first_buf = ip_message_buffer(ip_msg);
         tcp_msg = ehip_buffer_ref_dup(first_buf);
         if(eh_ptr_to_error(tcp_msg) < 0)
             goto drop;

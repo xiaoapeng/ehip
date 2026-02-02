@@ -209,7 +209,7 @@ void udp_input(struct ip_message *ip_msg){
     struct ip_message *ip_msg_tmp;
     
 
-    ret = ip_message_rx_read(ip_msg, (uint8_t**)&udp_hdr, sizeof(struct udp_hdr), (uint8_t*)&udp_hdr_tmp);
+    ret = ip_message_rx_smart_read(ip_msg, (uint8_t**)&udp_hdr, sizeof(struct udp_hdr), (uint8_t*)&udp_hdr_tmp);
     if(ret != sizeof(struct udp_hdr)){
         eh_msysfl(UDP_INPUT, "udp_hdr read error %d", ret);
         goto drop;
@@ -222,8 +222,8 @@ void udp_input(struct ip_message *ip_msg){
         ipv4_formatio(ip_msg->ip_hdr.dst_addr), eh_ntoh16(udp_hdr->dest), udp_data_len);
     eh_mdebugfl(UDP_INPUT, "check: %#hx", udp_hdr->check);
     if(!ip_message_flag_is_fragment(ip_msg)){
-        eh_mdebugfl(UDP_INPUT,"payload %.*hhq", ehip_buffer_get_payload_size(ip_msg->buffer), 
-            (uint8_t *)ehip_buffer_get_payload_ptr(ip_msg->buffer));
+        eh_mdebugfl(UDP_INPUT,"payload %.*hhq", ehip_buffer_get_payload_size(ip_message_buffer(ip_msg)), 
+            (uint8_t *)ehip_buffer_get_payload_ptr(ip_message_buffer(ip_msg)));
     }
 
     if( ip_message_rx_data_size(ip_msg) < udp_data_len ){
@@ -249,6 +249,8 @@ void udp_input(struct ip_message *ip_msg){
             goto drop;
         }
         if(udp_hdr->check){
+            ehip_buffer_t *pos_buffer;
+            uint16_t single_chksum_len;
             /* 计算伪首部校验和 */
             pseudo_header.src_addr = ip_msg->ip_hdr.src_addr;
             pseudo_header.dst_addr = ip_msg->ip_hdr.dst_addr;
@@ -257,19 +259,10 @@ void udp_input(struct ip_message *ip_msg){
             pseudo_header.len = udp_hdr->len;
             udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, &pseudo_header, sizeof(struct pseudo_header));
             udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, udp_hdr, sizeof(struct udp_hdr));
-            if(ip_message_flag_is_fragment(ip_msg)){
-                ehip_buffer_t *pos_buffer;
-                int tmp_i, tmp_sort_i;
-                uint16_t single_chksum_len;
-                /* 分片数据校验 */
-                ip_message_rx_fragment_for_each(pos_buffer, tmp_i, tmp_sort_i, ip_msg){
-                    single_chksum_len = ehip_buffer_get_payload_size(pos_buffer);
-                    udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, 
-                        ehip_buffer_get_payload_ptr(pos_buffer), single_chksum_len);
-                }
-            }else{
+            ip_message_fragment_for_each(pos_buffer, ip_msg){
+                single_chksum_len = ehip_buffer_get_payload_size(pos_buffer);
                 udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, 
-                    ehip_buffer_get_payload_ptr(ip_msg->buffer), ehip_buffer_get_payload_size(ip_msg->buffer));
+                    ehip_buffer_get_payload_ptr(pos_buffer), single_chksum_len);
             }
             if(udp_checksum != 0x0 && udp_checksum != 0xFFFF){
                 eh_mwarnfl(UDP_INPUT, "udp_hdr checksum error %#hx", udp_hdr->check);
@@ -290,7 +283,7 @@ void udp_input(struct ip_message *ip_msg){
         if(!udp_pcb_is_any(base_pcb)){
             restrict_pcb = (struct udp_pcb_restrict *)base_pcb;
             if( restrict_pcb->src_addr != ip_msg->ip_hdr.dst_addr ||
-                restrict_pcb->netdev != ip_msg->tx_init_netdev)
+                restrict_pcb->netdev != ip_message_get_netdev(ip_msg))
                 continue;
         }
 
@@ -302,8 +295,8 @@ void udp_input(struct ip_message *ip_msg){
         /* 找到udp_pcb */
         if(base_pcb->opt.recv_callback){
             ip_msg_tmp = ip_message_rx_ref_dup(ip_msg);
-            if(ip_msg_tmp == NULL){
-                eh_mwarnfl(UDP_INPUT, "ip_message_rx_ref_dup fail");
+            if(eh_ptr_to_error(ip_msg_tmp) != 0){
+                eh_mwarnfl(UDP_INPUT, "ip_message_rx_ref_dup fail %d", eh_ptr_to_error(ip_msg_tmp));
                 continue;
             }
             base_pcb->opt.recv_callback((udp_pcb_t)base_pcb, ip_msg_tmp->ip_hdr.src_addr, udp_hdr->source, ip_msg_tmp);
@@ -416,7 +409,7 @@ int   ehip_udp_sender_route_ready(struct udp_sender *sender){
 }
 
 int ehip_udp_sender_add_buffer(struct udp_sender *sender, 
-    ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_capacity_size){
+    ehip_buffer_t** out_buffer){
     struct ip_message* tx_msg = NULL;
     struct udp_pcb *pcb = (struct udp_pcb *)sender->pcb;
 
@@ -439,7 +432,7 @@ int ehip_udp_sender_add_buffer(struct udp_sender *sender,
     }
     tx_msg = sender->ip_msg;
 
-    return ip_message_tx_add_buffer(tx_msg, out_buffer, out_buffer_capacity_size);
+    return ip_message_tx_add_buffer(tx_msg, out_buffer);
 }
 
 
@@ -448,12 +441,10 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
     struct udp_hdr udp_hdr;
     struct pseudo_header pseudo_header;
     uint16_le_t udp_len = 0;
-    uint16_le_t udp_fragment_len = 0;
     uint16_t udp_checksum = 0;
     ehip_buffer_t *pos_buffer;
     bool is_no_chksum = udp_pcb_is_nochksum(pcb);
     bool is_udplite = udp_pcb_is_udplite(pcb);
-    int tmp_i;
     int ret = 0;
 
     if(sender->ip_msg == NULL || sender->ip_msg == (void*) UINTPTR_MAX)
@@ -471,17 +462,12 @@ int ehip_udp_send(udp_pcb_t _pcb, struct udp_sender *sender){
         ret = EH_RET_NOT_SUPPORTED;
         goto exit;
     }else{
-        if(ip_message_flag_is_fragment(sender->ip_msg)){
-            ip_message_tx_fragment_for_each(pos_buffer, tmp_i, sender->ip_msg){
-                udp_fragment_len = ehip_buffer_get_payload_size(pos_buffer);
-                udp_len += udp_fragment_len;
-                if(!is_no_chksum)
-                    udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, ehip_buffer_get_payload_ptr(pos_buffer), udp_fragment_len);
-            }
-        }else{
-            udp_len = ehip_buffer_get_payload_size(sender->ip_msg->buffer);
+        uint16_le_t udp_fragment_len = 0;
+        ip_message_fragment_for_each(pos_buffer, sender->ip_msg){
+            udp_fragment_len = ehip_buffer_get_payload_size(pos_buffer);
+            udp_len += udp_fragment_len;
             if(!is_no_chksum)
-                udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, ehip_buffer_get_payload_ptr(sender->ip_msg->buffer), udp_len);
+                udp_checksum = ehip_inet_chksum_accumulated(udp_checksum, ehip_buffer_get_payload_ptr(pos_buffer), udp_fragment_len);
         }
 
         udp_hdr.len = eh_hton16(udp_len + (uint16_t)sizeof(struct udp_hdr)) ;

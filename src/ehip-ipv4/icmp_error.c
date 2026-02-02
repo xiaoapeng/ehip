@@ -41,7 +41,7 @@ void icmp_error_input(struct ip_message *ip_msg, const struct icmp_hdr *icmp_hdr
         goto drop;
     }
     icmp_error_payload_len = icmp_error_payload_len > ICMP_ERROR_PAYLOAD_MAX_LEN ? ICMP_ERROR_PAYLOAD_MAX_LEN : icmp_error_payload_len;
-    ip_message_rx_read(ip_msg, (uint8_t**)&err_ip_hdr, sizeof(struct ip_hdr), (uint8_t*)&err_ip_hdr_tmp);
+    ip_message_rx_smart_read(ip_msg, (uint8_t**)&err_ip_hdr, sizeof(struct ip_hdr), (uint8_t*)&err_ip_hdr_tmp);
     ip_message_rx_real_read(ip_msg, icmp_error_payload, (ehip_buffer_size_t)icmp_error_payload_len);
     eh_mdebugfl( ICMP_ERROR_INPUT, "######## ERROR IP HEADER ########");
     eh_mdebugfl( ICMP_ERROR_INPUT, "src: %d.%d.%d.%d", 

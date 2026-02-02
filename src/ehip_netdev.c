@@ -75,7 +75,7 @@ void ehip_netdev_protocol_handle_unregister(ehip_netdev_t *netdev, struct ehip_p
 }
 
 
-ehip_netdev_t * ehip_netdev_find(char *netdev_name){
+ehip_netdev_t * ehip_netdev_find(const char *netdev_name){
     ehip_netdev_t *pos;
     eh_list_for_each_entry(pos, &s_netdev_head, node){
         if(strcmp(pos->param->name, netdev_name) == 0)

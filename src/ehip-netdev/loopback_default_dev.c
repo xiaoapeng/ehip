@@ -63,7 +63,7 @@ static int loopback_default_start_xmit(ehip_netdev_t *netdev, ehip_buffer_t *buf
     buf->protocol = loopback_hdr->type;
     buf->packet_type = EHIP_PACKET_TYPE_LOOPBACK;
     buf->netdev = loopback_hdr->virtual_hw_addr;
-    ehip_buffer_head_reduce(buf, sizeof(struct loopback_hdr));
+    ehip_buffer_payload_head_reduce(buf, sizeof(struct loopback_hdr));
     ehip_rx(buf);
     return EH_RET_OK;
 drop:

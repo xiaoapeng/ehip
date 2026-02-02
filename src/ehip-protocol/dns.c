@@ -196,7 +196,7 @@ static void udp_recv_callback(udp_pcb_t pcb, ipv4_addr_t addr, uint16_be_t port,
     eh_mdebugfl(DNS, "qdcount: %d, ancount: %d, nscount: %d, arcount: %d",
         eh_ntoh16(dns_hdr.qdcount), eh_ntoh16(dns_hdr.ancount), eh_ntoh16(dns_hdr.nscount), eh_ntoh16(dns_hdr.arcount));
     eh_mdebugfl(DNS, "msglen:%d |%.*hhq|",ip_message_rx_data_size(udp_rx_meg), 
-         ehip_buffer_get_payload_size(udp_rx_meg->buffer), ehip_buffer_get_payload_ptr(udp_rx_meg->buffer));
+         ehip_buffer_get_payload_size(ip_message_buffer(udp_rx_meg)), ehip_buffer_get_payload_ptr(ip_message_buffer(udp_rx_meg)));
     if(dns_hdr.qr == 0 || dns_hdr.qdcount != eh_ntoh16((uint16_t)1) || idx > EHIP_DNS_MAX_TABLE_ENTRY_COUNT || s_dns_table[idx].id != id){
         eh_mwarnfl(DNS, "Discard dns response id: %d, idx:%d , qr: %d, opcode: %d," EH_DEBUG_ENTER_SIGN
                         "       aa: %d, tc: %d, rd: %d, ra: %d, rcode: %d," EH_DEBUG_ENTER_SIGN
@@ -231,7 +231,7 @@ static void udp_recv_callback(udp_pcb_t pcb, ipv4_addr_t addr, uint16_be_t port,
             }
             break;
         }
-        ret = ip_message_rx_read(udp_rx_meg, (uint8_t ** )&tmp_buf_ptr, label_len, (uint8_t*)tmp_buf);
+        ret = ip_message_rx_smart_read(udp_rx_meg, (uint8_t ** )&tmp_buf_ptr, label_len, (uint8_t*)tmp_buf);
         if(ret != label_len){
             eh_mwarnfl(DNS, "Discard dns response label read error");
             return ;
@@ -403,7 +403,6 @@ static int dns_udp_sender_mkquery(udp_pcb_t pcb, struct udp_sender *udp_sender, 
     int ret = 0;
     ehip_buffer_t *out_buffer = NULL;
     struct dns_hdr *dns_hdr;
-    ehip_buffer_size_t out_buffer_capacity_size = 0;
     ehip_buffer_size_t pack_size;
     char *question;
     size_t m,j;
@@ -414,7 +413,7 @@ static int dns_udp_sender_mkquery(udp_pcb_t pcb, struct udp_sender *udp_sender, 
             ipv4_formatio(dns_server), eh_ntoh16(dns_port), ret);
         return ret;
     }
-    ret = ehip_udp_sender_add_buffer(udp_sender, &out_buffer, &out_buffer_capacity_size);
+    ret = ehip_udp_sender_add_buffer(udp_sender, &out_buffer);
     if(ret < 0){
         eh_merrfl(DNS, "dns server " IPV4_FORMATIO ":%d udp sender add buffer fail %d", 
             ipv4_formatio(dns_server), eh_ntoh16(dns_port), ret);
@@ -422,13 +421,13 @@ static int dns_udp_sender_mkquery(udp_pcb_t pcb, struct udp_sender *udp_sender, 
     }
     /* 检查缓冲区是否足够  最小需要 sizeof(struct dns_hdr) + 1 + l + 1 + type + class */
     pack_size = (ehip_buffer_size_t)(sizeof(struct dns_hdr) + 1 + dname_len + 1 + 2 + 2);
-    if(out_buffer_capacity_size < pack_size){
-        eh_merrfl(DNS, "dns server " IPV4_FORMATIO ":%d udp sender buffer size %d < %d", 
-            ipv4_formatio(dns_server), out_buffer_capacity_size, pack_size);
+    dns_hdr = (struct dns_hdr *)ehip_buffer_payload_tail_append(out_buffer, pack_size);
+    if(dns_hdr == NULL){
+        eh_merrfl(DNS, "dns server " IPV4_FORMATIO ":%d udp sender add buffer fail %d", 
+            ipv4_formatio(dns_server), eh_ntoh16(dns_port), ret);
         ehip_udp_sender_deinit(udp_sender);
         return ret;
     }
-    dns_hdr = (struct dns_hdr *)ehip_buffer_payload_append(out_buffer, pack_size);
     memset(dns_hdr, 0, sizeof(struct dns_hdr));
     dns_hdr->id = id;
     dns_hdr->opcode = (uint8_t)(op & 0x0f);

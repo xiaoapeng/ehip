@@ -39,11 +39,12 @@ static const struct ehip_pool_info ehip_pool_info_tab[EHIP_BUFFER_TYPE_MAX] = {
     [EHIP_BUFFER_TYPE_GENERAL_FRAME] = {"general-network-buffer", EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_SIZE, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_NUM, EHIP_NETDEV_TYPE_GENERAL_POOL_BUFFER_ALIGN}
 };
 
-static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0, ehip_buffer_raw_ptr buffer_raw_ptr){
+static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0, 
+        ehip_buffer_raw_ptr buffer_raw_ptr, ehip_buffer_size_t max_buffer_size){
     ehip_buffer_t *buf;
     struct ehip_buffer_ref *buf_ref;
     int ret;
-    if((uint32_t)type >= EHIP_BUFFER_TYPE_MAX || ehip_pool_info_tab[type].size < head_reserved_size_or_0)
+    if((uint32_t)type >= EHIP_BUFFER_TYPE_MAX || ehip_pool_info_tab[type].size < head_reserved_size_or_0 || max_buffer_size > ehip_pool_info_tab[type].size)
         return eh_error_to_ptr(EH_RET_INVALID_PARAM);
     
     buf = eh_mem_pool_alloc(pool_ehip_buffer);
@@ -58,6 +59,9 @@ static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_s
         ret = EH_RET_MEM_POOL_EMPTY;
         goto eh_mem_pool_alloc_buffer_ref_fail;
     }
+
+    if(max_buffer_size == EHIP_BUFFER_UNLIMITED)
+        max_buffer_size = ehip_pool_info_tab[type].size;
     
     buf->buffer_ref = buf_ref;
     buf->payload_pos = head_reserved_size_or_0;
@@ -67,7 +71,7 @@ static ehip_buffer_t* _ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_s
     buf_ref->buffer = buffer_raw_ptr;
     buf_ref->ref_cnt = 1;
     buf_ref->type = type;
-    buf_ref->buffer_size = ehip_pool_info_tab[type].size;
+    buf_ref->buffer_size = max_buffer_size;
     return buf;
 eh_mem_pool_alloc_buffer_ref_fail:
     eh_mem_pool_free(pool_ehip_buffer, buf);
@@ -76,6 +80,11 @@ eh_mem_pool_alloc_buffer_ref_fail:
 
 eh_mem_pool_t ehip_buffer_type_mem_pool(enum ehip_buffer_type type){
     return pool_tab[type];
+}
+
+
+ehip_buffer_size_t ehip_buffer_get_block_size(enum ehip_buffer_type type){
+    return ehip_pool_info_tab[type].size;
 }
 
 ehip_buffer_raw_ptr ehip_buffer_new_raw_ptr(enum ehip_buffer_type type){
@@ -102,7 +111,7 @@ void ehip_buffer_free(ehip_buffer_t* buf){
 }
 
 
-ehip_buffer_t* ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0){
+ehip_buffer_t* ehip_buffer_limit_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0, ehip_buffer_size_t max_buffer_size){
     void* buffer_ptr;
     ehip_buffer_t* new_buf;
     if((uint32_t)type >= EHIP_BUFFER_TYPE_MAX || ehip_pool_info_tab[type].size < head_reserved_size_or_0)
@@ -114,7 +123,7 @@ ehip_buffer_t* ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t he
         return eh_error_to_ptr(EH_RET_MEM_POOL_EMPTY);
     }
 
-    new_buf = _ehip_buffer_new(type, head_reserved_size_or_0, buffer_ptr);
+    new_buf = _ehip_buffer_new(type, head_reserved_size_or_0, buffer_ptr, max_buffer_size);
     if(eh_ptr_to_error(new_buf) < 0)
         eh_mem_pool_free(pool_tab[type], buffer_ptr);
     return new_buf;
@@ -123,11 +132,11 @@ ehip_buffer_t* ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t he
 extern ehip_buffer_t* ehip_buffer_new_from_buf(enum ehip_buffer_type type, ehip_buffer_raw_ptr buf){
     if(eh_mem_pool_ptr_to_idx(pool_tab[type], buf) < 0)
         return eh_error_to_ptr(EH_RET_INVALID_PARAM);
-    return _ehip_buffer_new(type, 0, buf);
+    return _ehip_buffer_new(type, 0, buf, EHIP_BUFFER_UNLIMITED);
 }
 
 ehip_buffer_t* ehip_buffer_dup(ehip_buffer_t* src){
-    ehip_buffer_t* new_buffer = ehip_buffer_new(src->buffer_ref->type, 0);
+    ehip_buffer_t* new_buffer = ehip_buffer_limit_new(src->buffer_ref->type, 0, ehip_buffer_get_buffer_size(src));
     if(eh_ptr_to_error(new_buffer) < 0)
         return new_buffer;
     new_buffer->payload_pos = src->payload_pos;
@@ -158,7 +167,7 @@ ehip_buffer_t* ehip_buffer_ref_dup(ehip_buffer_t* src){
     return new_buffer;
 }
 
-uint8_t* ehip_buffer_payload_append(ehip_buffer_t* buf, ehip_buffer_size_t size){
+uint8_t* ehip_buffer_payload_tail_append(ehip_buffer_t* buf, ehip_buffer_size_t size){
     uint8_t *new_payload_ptr = ehip_buffer_get_payload_end_ptr(buf);
     if((int)((buf->payload_tail) + size) > (int)ehip_buffer_get_buffer_size(buf))
         return NULL;
@@ -167,7 +176,7 @@ uint8_t* ehip_buffer_payload_append(ehip_buffer_t* buf, ehip_buffer_size_t size)
 }
 
 
-uint8_t* ehip_buffer_payload_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size){
+uint8_t* ehip_buffer_payload_tail_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size){
     uint8_t *remove_payload_ptr;
     if((int)ehip_buffer_get_payload_size(buf) < (int)size)
         return NULL;
@@ -177,14 +186,14 @@ uint8_t* ehip_buffer_payload_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size)
 }
 
 
-uint8_t* ehip_buffer_head_append(ehip_buffer_t* buf, ehip_buffer_size_t size){
+uint8_t* ehip_buffer_payload_head_append(ehip_buffer_t* buf, ehip_buffer_size_t size){
     if(buf->payload_pos < size)
         return NULL;
     buf->payload_pos -= size;
     return ehip_buffer_get_payload_ptr(buf);
 }
 
-uint8_t* ehip_buffer_head_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size){
+uint8_t* ehip_buffer_payload_head_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size){
     uint8_t *old_payload_ptr;
     if((int)ehip_buffer_get_payload_size(buf) < (int)size)
         return NULL;

@@ -40,6 +40,7 @@ eh_static_assert(EHIP_BUFFER_TYPE_MAX <= UINT8_MAX, "ehip_buffer_type must be le
 #define EHIP_PACKET_TYPE_OTHERHOST      0x03
 #define EHIP_PACKET_TYPE_LOOPBACK       0x04
 
+#define EHIP_BUFFER_UNLIMITED     0
 
 struct ehip_buffer_ref{
     uint8_t                    *buffer;
@@ -56,7 +57,14 @@ struct ehip_buffer{
 
     /* 该字段在tx时不进行使用，一般在rx时在每一层被赋值使用 */
     enum ehip_ptype             protocol;
-    ehip_netdev_t              *netdev;
+    union{
+        /* 数据包到ip层后netdev字段将由ip_message代替，那么这一部分可以给ip层作为分片重组使用 */
+        ehip_netdev_t              *netdev;
+        struct {
+            uint16_t            fragment_start_offset;
+            uint16_t            fragment_end_offset;
+        }ip_rx;
+    };
     union{
         ehip_buffer_flags_t         flags;
         struct{
@@ -97,6 +105,21 @@ struct ehip_buffer{
 #define ehip_buffer_get_payload_size(buf) ((ehip_buffer_size_t)((buf)->payload_tail - (buf)->payload_pos))
 
 /**
+ * @brief                   获取头部预留空间容量大小
+ */
+#define ehip_buffer_get_head_capacity(buf) ((ehip_buffer_size_t)((buf)->payload_pos))
+
+/**
+ * @brief                   获取尾部空间剩余容量大小
+ */
+#define ehip_buffer_get_tail_capacity(buf) ((ehip_buffer_size_t)((buf)->buffer_ref->buffer_size - (buf)->payload_tail))
+
+/**
+ * @brief                   获取可用容量
+ */
+#define ehip_buffer_get_free_capacity(buf)  ehip_buffer_get_tail_capacity(buf)
+
+/**
  * @brief                   获取有效数据的结束指针地址，在访问数据时作为边界条件使用
  * @return                  payload end ptr
  */
@@ -116,6 +139,13 @@ struct ehip_buffer{
 extern eh_mem_pool_t ehip_buffer_type_mem_pool(enum ehip_buffer_type type);
 
 /**
+ * @brief                   获取该buffer类型的内存块大小
+ * @param  type             内存池类型
+ * @return ehip_buffer_size_t 失败返回0
+ */
+extern ehip_buffer_size_t ehip_buffer_get_block_size(enum ehip_buffer_type type);
+
+/**
  * @brief                   向 tpye内存池获取一个裸指针内存块
  * @param  type             内存池类型
  * @return ehip_buffer_raw_ptr 失败返回NULL
@@ -130,13 +160,25 @@ extern ehip_buffer_raw_ptr ehip_buffer_new_raw_ptr(enum ehip_buffer_type type);
  */
 extern void ehip_buffer_free_raw_ptr(enum ehip_buffer_type type, ehip_buffer_raw_ptr buf);
 
+
+/**
+ * @brief                   新建一个网络数据buf，初始引用计数为1,可限制其buf最大大小，提供给ip层用作MTU设置
+ * @param  type             数据类型
+ * @param  head_reserved_size_or_0      准备预留的空间，或者填0不预留头部空间
+ * @param  max_buffer_size     当 max_buffer_size 为 EHIP_BUFFER_UNLIMITED 时意味着不限制
+ * @return ehip_buffer_t*   返回buf句柄, 返回值使用eh_ptr_to_error判断
+ */
+extern ehip_buffer_t* ehip_buffer_limit_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0, ehip_buffer_size_t max_buffer_size);
+
 /**
  * @brief                   新建一个网络数据buf，初始引用计数为1
  * @param  type             数据类型
  * @param  head_reserved_size_or_0      准备预留的空间，或者填0不预留头部空间
  * @return ehip_buffer_t*   返回buf句柄, 返回值使用eh_ptr_to_error判断
  */
-extern ehip_buffer_t* ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0);
+static inline ehip_buffer_t* ehip_buffer_new(enum ehip_buffer_type type, ehip_buffer_size_t head_reserved_size_or_0){
+    return ehip_buffer_limit_new(type, head_reserved_size_or_0, EHIP_BUFFER_UNLIMITED);
+}
 
 /**
  * @brief                   从一个外部缓冲区创建一个网络数据buf，初始引用计数为1
@@ -173,7 +215,7 @@ extern ehip_buffer_t* ehip_buffer_ref_dup(ehip_buffer_t* buf);
  * @param  size             本次追加数据的数量
  * @return uint8_t*         返回本次追加数据的开始指针，用户需要自己追加
  */
-extern uint8_t* ehip_buffer_payload_append(ehip_buffer_t* buf, ehip_buffer_size_t size);
+extern uint8_t* ehip_buffer_payload_tail_append(ehip_buffer_t* buf, ehip_buffer_size_t size);
 
 
 
@@ -183,7 +225,7 @@ extern uint8_t* ehip_buffer_payload_append(ehip_buffer_t* buf, ehip_buffer_size_
  * @param size              需要减少的空间大小
  * @return uint8_t*         返回被移除的空间的开始指针，如果失败返回NULL
  */
-extern uint8_t* ehip_buffer_payload_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size);
+extern uint8_t* ehip_buffer_payload_tail_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size);
 
 
 /**
@@ -192,7 +234,7 @@ extern uint8_t* ehip_buffer_payload_reduce(ehip_buffer_t* buf, ehip_buffer_size_
  * @param size              需要追加的空间大小
  * @return uint8_t*         返回新头部的缓冲区头部指针，如果失败返回NULL
  */
-extern uint8_t* ehip_buffer_head_append(ehip_buffer_t* buf, ehip_buffer_size_t size);
+extern uint8_t* ehip_buffer_payload_head_append(ehip_buffer_t* buf, ehip_buffer_size_t size);
 
 /**
  * @brief                   减少缓冲区头部空间
@@ -200,7 +242,7 @@ extern uint8_t* ehip_buffer_head_append(ehip_buffer_t* buf, ehip_buffer_size_t s
  * @param size              需要减少的空间大小
  * @return uint8_t*         返回被移除的空间的开始指针，如果失败返回NULL
  */
-extern uint8_t* ehip_buffer_head_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size);
+extern uint8_t* ehip_buffer_payload_head_reduce(ehip_buffer_t* buf, ehip_buffer_size_t size);
 
 
 

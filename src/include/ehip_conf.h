@@ -118,7 +118,7 @@
 
 /* IP分片超时时间, 最大255 */
 #ifndef EHIP_IP_FRAGMENT_TIMEOUT
-#define EHIP_IP_FRAGMENT_TIMEOUT                                15
+#define EHIP_IP_FRAGMENT_TIMEOUT                                4
 #endif
 
 /* 默认TTL */

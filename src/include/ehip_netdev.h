@@ -116,7 +116,7 @@ extern void ehip_netdev_protocol_handle_unregister(ehip_netdev_t *netdev, struct
  * @param  netdev_name      网卡注册时名称
  * @return ehip_netdev_t* 
  */
-extern ehip_netdev_t * ehip_netdev_find(char *netdev_name);
+extern ehip_netdev_t * ehip_netdev_find(const char *netdev_name);
 
 
 /**

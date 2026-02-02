@@ -111,11 +111,15 @@ static void ethernet_dev_trait_down(ehip_netdev_t *netdev){
 
 static void ethernet_dev_trait_reset(ehip_netdev_t *netdev){
     struct ethernet_trait *netdev_ethernet_trait = (struct ethernet_trait *)ehip_netdev_to_trait(netdev);
+    ehip_buffer_size_t net_max_frame_size;
     memset(netdev_ethernet_trait, 0, sizeof(struct ethernet_trait));
     netdev->attr.hw_addr_len = EHIP_ETH_HWADDR_LEN;
     netdev->attr.hw_head_size = sizeof(struct eth_hdr);
     netdev->attr.hw_tail_size = 4;   /* crc */
-    netdev->attr.mtu = (uint16_t)(netdev->param->net_max_frame_size - 
+    net_max_frame_size = ehip_buffer_get_block_size(EHIP_BUFFER_TYPE_GENERAL_FRAME);
+    net_max_frame_size = netdev->param->net_max_frame_size > net_max_frame_size ? 
+        net_max_frame_size : netdev->param->net_max_frame_size;
+    netdev->attr.mtu = (uint16_t)(net_max_frame_size - 
         netdev->attr.hw_head_size - netdev->attr.hw_tail_size);
     netdev->attr.buffer_type = EHIP_BUFFER_TYPE_GENERAL_FRAME;
     netdev_ethernet_trait->mac_ptype = EHIP_PTYPE_ETHERNET_II_FRAME;
@@ -134,7 +138,7 @@ static int  ethernet_dev_trait_hard_header(ehip_netdev_t *netdev, ehip_buffer_t 
     struct eth_hdr *eth_hdr;
     if(netdev_ethernet_trait->mac_ptype != EHIP_PTYPE_ETHERNET_II_FRAME)
         return EH_RET_NOT_SUPPORTED;
-    eth_hdr = (struct eth_hdr *)ehip_buffer_head_append(buf, (ehip_buffer_size_t)sizeof(struct eth_hdr));
+    eth_hdr = (struct eth_hdr *)ehip_buffer_payload_head_append(buf, (ehip_buffer_size_t)sizeof(struct eth_hdr));
     if(eth_hdr == NULL)
         return EH_RET_INVALID_PARAM;
     memcpy(&eth_hdr->src, src_hw_addr, EHIP_ETH_HWADDR_LEN);
@@ -151,7 +155,7 @@ static int ethernet_dev_trait_buffer_padding(ehip_netdev_t *netdev, ehip_buffer_
         return EH_RET_OK;
     padding_size = EHIP_ETH_FRAME_MIN_LEN - EHIP_ETH_FRAME_CRC_LEN - ehip_buffer_get_payload_size(buf);
 
-    padding_ptr = ehip_buffer_payload_append(buf, padding_size);
+    padding_ptr = ehip_buffer_payload_tail_append(buf, padding_size);
     if(padding_ptr){
         memset(padding_ptr, 0, padding_size);
         return EH_RET_OK;

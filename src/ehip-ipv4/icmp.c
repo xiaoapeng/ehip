@@ -18,27 +18,19 @@ void icmp_input(struct ip_message *ip_msg){
     struct icmp_hdr *icmp_hdr;
     struct icmp_hdr icmp_hdr_tmp;
     uint16_t        checksum = 0;
+    ehip_buffer_t *pos_buffer;
+    ehip_buffer_size_t single_chksum_len;
 
-    ret = ip_message_rx_read(ip_msg, (uint8_t**)&icmp_hdr, sizeof(struct icmp_hdr), (uint8_t*)&icmp_hdr_tmp);
+    ret = ip_message_rx_smart_read(ip_msg, (uint8_t**)&icmp_hdr, sizeof(struct icmp_hdr), (uint8_t*)&icmp_hdr_tmp);
     if(ret != sizeof(struct icmp_hdr)){
         goto drop;
     }
-
+    
     checksum = ehip_inet_chksum_accumulated(checksum, (uint8_t*)icmp_hdr, sizeof(struct icmp_hdr));
-    if(ip_message_flag_is_fragment(ip_msg)){
-        ehip_buffer_t *pos_buffer;
-        int tmp_i, tmp_sort_i;
-        uint16_t single_chksum_len;
-        /* 分片数据校验 */
-        ip_message_rx_fragment_for_each(pos_buffer, tmp_i, tmp_sort_i, ip_msg){
-            single_chksum_len = ehip_buffer_get_payload_size(pos_buffer);
-            checksum = ehip_inet_chksum_accumulated(checksum, 
-                ehip_buffer_get_payload_ptr(pos_buffer), single_chksum_len);
-        }
-
-    }else{
+    ip_message_fragment_for_each(pos_buffer, ip_msg){
+        single_chksum_len = ehip_buffer_get_payload_size(pos_buffer);
         checksum = ehip_inet_chksum_accumulated(checksum, 
-            ehip_buffer_get_payload_ptr(ip_msg->buffer), ehip_buffer_get_payload_size(ip_msg->buffer));
+            ehip_buffer_get_payload_ptr(pos_buffer), single_chksum_len);
     }
 
     if(checksum != 0){

@@ -48,7 +48,7 @@ static void ethernet_v2_handle(struct ehip_buffer* buf){
     
     /* 更新下一层协议 */
     buf->protocol = hdr->type_or_len;
-    ehip_buffer_head_reduce(buf, sizeof(struct eth_hdr));
+    ehip_buffer_payload_head_reduce(buf, sizeof(struct eth_hdr));
     ehip_rx(buf);
     return ;
 drop:

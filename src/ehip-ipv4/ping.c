@@ -93,11 +93,11 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
     enum route_table_type route_type;
     int arp_idx;
     struct ip_message *ip_msg_reply;
-    struct icmp_hdr *icmp_hdr_reply;
+    struct icmp_hdr icmp_hdr_reply;
     ehip_buffer_t *out_buffer;
-    ehip_buffer_size_t out_buffer_capacity_size;
     ehip_buffer_size_t data_size;
     ehip_buffer_size_t single_data_size;
+    ehip_buffer_size_t out_buffer_capacity_size;
     uint8_t *write_ptr;
     ehip_netdev_t *netdev;
     struct route_info  out_route;
@@ -113,13 +113,9 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
 
     /* 生成回复的 ip报文,header_reserved_size将设置为0，因为下面会将icmp头部当作数据的一部分来处理 */
     ip_msg_reply = ip_message_tx_new(netdev, ipv4_make_tos(0, 0), 
-        EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, best_src_addr, ip_msg->ip_hdr.src_addr, NULL, 0, 0, route_type);
+        EHIP_IP_DEFAULT_TTL, IP_PROTO_ICMP, best_src_addr, ip_msg->ip_hdr.src_addr, NULL, 0, sizeof(struct icmp_hdr), route_type);
     if(eh_ptr_to_error(ip_msg_reply) < 0)
         goto unreachable_target;
-    
-    ret = ip_message_tx_add_buffer(ip_msg_reply, &out_buffer, &out_buffer_capacity_size);
-    if(ret < 0 || out_buffer_capacity_size < sizeof(struct icmp_hdr))
-        goto make_ip_message_tx_fail;
 
     ret = ip_message_rx_data_size(ip_msg);
     if(ret < 0)
@@ -127,56 +123,32 @@ static void ping_echo_server(struct ip_message *ip_msg, const struct icmp_hdr *i
 
     data_size = (ehip_buffer_size_t)ret;
 
-    if(data_size > out_buffer_capacity_size - sizeof(struct icmp_hdr)){
-        /* 说明回复的数据量较大，需要分片， out_buffer_capacity_size 需要对齐8字节 */
-        out_buffer_capacity_size =  out_buffer_capacity_size & (ehip_buffer_size_t)(~7);
-    }
-
-    /* append 合适的大小 */
-    single_data_size = data_size + sizeof(struct icmp_hdr);
-    single_data_size = out_buffer_capacity_size > single_data_size ? 
-        single_data_size : out_buffer_capacity_size;
-    icmp_hdr_reply = (struct icmp_hdr *)ehip_buffer_payload_append(out_buffer, single_data_size);
-    if(icmp_hdr_reply == NULL)
-        goto make_ip_message_tx_fail;
-
-    icmp_hdr_reply->type = ICMP_TYPE_ECHO_REPLY;
-    icmp_hdr_reply->code = 0;
-    icmp_hdr_reply->checksum = 0;
-    icmp_hdr_reply->echo.id = icmp_hdr->echo.id;
-    icmp_hdr_reply->echo.sequence = icmp_hdr->echo.sequence;
-
-    icmp_hdr_reply->checksum = ehip_inet_chksum((uint16_t *)icmp_hdr_reply, sizeof(struct icmp_hdr));
-
-    write_ptr = (uint8_t *)(icmp_hdr_reply + 1);
-
-    single_data_size = single_data_size - (ehip_buffer_size_t)(sizeof(struct icmp_hdr));
-    ret = ip_message_rx_real_read(ip_msg, write_ptr, single_data_size);
-    if(ret < 0)
-        goto make_ip_message_tx_fail;
-    
-    icmp_hdr_reply->checksum = ehip_inet_chksum_accumulated(icmp_hdr_reply->checksum,
-        (uint16_t *)write_ptr, single_data_size);
-    data_size -= single_data_size;
+    icmp_hdr_reply.type = ICMP_TYPE_ECHO_REPLY;
+    icmp_hdr_reply.code = 0;
+    icmp_hdr_reply.checksum = 0;
+    icmp_hdr_reply.echo.id = icmp_hdr->echo.id;
+    icmp_hdr_reply.echo.sequence = icmp_hdr->echo.sequence;
+    icmp_hdr_reply.checksum = ehip_inet_chksum(&icmp_hdr_reply, sizeof(struct icmp_hdr));
 
     while(data_size){
-        ret = ip_message_tx_add_buffer(ip_msg_reply, &out_buffer, &out_buffer_capacity_size);
+        ret = ip_message_tx_add_buffer(ip_msg_reply, &out_buffer);
         if(ret < 0)
             goto make_ip_message_tx_fail;
+        out_buffer_capacity_size = ehip_buffer_get_tail_capacity(out_buffer);
         single_data_size = out_buffer_capacity_size > data_size ? 
             data_size : out_buffer_capacity_size;
-        write_ptr = ehip_buffer_payload_append(out_buffer, single_data_size);
+        write_ptr = ehip_buffer_payload_tail_append(out_buffer, single_data_size);
         if(write_ptr == NULL)
             goto make_ip_message_tx_fail;
         ret = ip_message_rx_real_read(ip_msg, write_ptr, single_data_size);
         if(ret < 0)
             goto make_ip_message_tx_fail;
-        icmp_hdr_reply->checksum = ehip_inet_chksum_accumulated(icmp_hdr_reply->checksum,
+        icmp_hdr_reply.checksum = ehip_inet_chksum_accumulated(icmp_hdr_reply.checksum,
             (uint16_t *)write_ptr, single_data_size);
         data_size -= single_data_size;
     }
 
-    ret = ip_message_tx_ready(ip_msg_reply, NULL);
+    ret = ip_message_tx_ready(ip_msg_reply, (const uint8_t *)&icmp_hdr_reply);
     if(ret < 0)
         goto ip_message_tx_ready_error;
     arp_idx = -1;
@@ -352,7 +324,6 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
     struct ping_pcb *pcb = (struct ping_pcb *)_pcb;
     eh_clock_t now;
     ehip_buffer_t *out_buffer;
-    ehip_buffer_size_t out_buffer_capacity_size;
     int ret;
     struct ping_request *ping_request;
     uint16_t single_data_size;
@@ -377,18 +348,18 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
     if(eh_ptr_to_error(ip_msg) < 0)
         return eh_ptr_to_error(ip_msg);
 
-    ret = ip_message_tx_add_buffer(ip_msg, &out_buffer, &out_buffer_capacity_size);
+    ret = ip_message_tx_add_buffer(ip_msg, &out_buffer);
     if(ret < 0)
         goto free_ip_msg_quit;
 
-    if(out_buffer_capacity_size < sizeof(struct ping_request)){
-        eh_mwarnfl(PING_REQUEST, "out_buffer_capacity_size < sizeof(struct ping_request)!");
+    if(ehip_buffer_get_tail_capacity(out_buffer) < sizeof(struct ping_request)){
+        eh_mwarnfl(PING_REQUEST, "out_buffer tail capacity < sizeof(struct ping_request)!");
         ret = EH_RET_INVALID_STATE;
         goto free_ip_msg_quit;
     }
 
     now = eh_get_clock_monotonic_time();
-    ping_request = (struct ping_request*)ehip_buffer_payload_append(out_buffer, sizeof(struct ping_request));
+    ping_request = (struct ping_request*)ehip_buffer_payload_tail_append(out_buffer, sizeof(struct ping_request));
     ping_request->icmp_hdr.type = ICMP_TYPE_ECHO;
     ping_request->icmp_hdr.code = 0;
     ping_request->icmp_hdr.checksum = 0;
@@ -402,11 +373,11 @@ int ehip_ping_request(ping_pcb_t _pcb, uint16_t data_len){
     data_len -= (uint16_t)sizeof(eh_clock_t);
 
     while(data_len){
-        ret = ip_message_tx_add_buffer(ip_msg, &out_buffer, &out_buffer_capacity_size);
+        ret = ip_message_tx_add_buffer(ip_msg, &out_buffer);
         if(ret < 0)
             goto free_ip_msg_quit;
-        single_data_size = data_len > out_buffer_capacity_size ? out_buffer_capacity_size : data_len;
-        write_ptr = ehip_buffer_payload_append(out_buffer, single_data_size);
+        single_data_size = data_len > ehip_buffer_get_tail_capacity(out_buffer) ? ehip_buffer_get_tail_capacity(out_buffer) : data_len;
+        write_ptr = ehip_buffer_payload_tail_append(out_buffer, single_data_size);
         for(int i = 0; i < single_data_size; i++)
             write_ptr[i] = val++;
         ping_request->icmp_hdr.checksum = ehip_inet_chksum_accumulated(ping_request->icmp_hdr.checksum, write_ptr, single_data_size);

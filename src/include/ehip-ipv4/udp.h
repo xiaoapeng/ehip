@@ -145,11 +145,10 @@ extern int   ehip_udp_sender_route_ready(struct udp_sender *sender);
  * @brief                                添加udp报文发送缓冲区
  * @param  sender                        udp报文发送器
  * @param  out_buffer                    输出缓冲区
- * @param  out_buffer_capacity_size      可用缓冲区大小
  * @return int 
  */
 extern int       ehip_udp_sender_add_buffer(struct udp_sender *sender, 
-        ehip_buffer_t** out_buffer, ehip_buffer_size_t *out_buffer_capacity_size);
+        ehip_buffer_t** out_buffer);
 
 
 /**

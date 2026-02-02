@@ -55,12 +55,7 @@ static void slot_function_arp_changed(eh_event_t *e, void *param){
             ehip_buffer_t *head_payload;
             eh_mdebugfl(IP_TX, "arp query [" IPV4_FORMATIO "]=[ERROR]", ipv4_formatio(ptr->dst_addr_or_gw_addr));
             /* 进行错误处理 */
-            // 调用ip_raw_error(ipv4_addr_t err_sender, struct ip_hdr *ip_hdr, const uint8_t *payload, int payload_len, int error)
-            if(ip_message_flag_is_fragment(ip_msg)){
-                head_payload = ip_message_rx_fragment_first(ip_msg);
-            }else{
-                head_payload = ip_message_first(ip_msg);
-            }
+            head_payload = ip_message_buffer(ip_msg);
             payload = ehip_buffer_get_payload_ptr(head_payload) + ipv4_hdr_len(&ip_msg->ip_hdr);
             payload_len = ehip_buffer_get_payload_size(head_payload) - ipv4_hdr_len(&ip_msg->ip_hdr);
             if(payload_len <= 0){
@@ -102,40 +97,20 @@ static int ip_tx_done(struct ip_message *ip_msg, const ehip_hw_addr_t* hw_addr){
     int ret = 0;
     ehip_buffer_t *pos_buffer;
     ehip_buffer_t *tx_pos_buffer;
-    int tmp_i;
     ehip_netdev_t *netdev;
-
-    if(ip_message_flag_is_fragment(ip_msg)){
-        ip_message_tx_fragment_for_each(pos_buffer, tmp_i, ip_msg){
-            netdev = pos_buffer->netdev;
-            /* 填充链路层头部 */
-            ret = ehip_netdev_trait_hard_header(netdev, pos_buffer, 
-                ehip_netdev_trait_hw_addr(netdev), hw_addr,
-                EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(pos_buffer));
-            if(ret < 0)
-                goto quit;
-            ret = ehip_netdev_trait_buffer_padding(netdev, pos_buffer);
-            if(ret < 0)
-                goto quit;
-
-            tx_pos_buffer = ehip_buffer_ref_dup(pos_buffer);
-            if(eh_ptr_to_error(tx_pos_buffer) < 0){
-                ret = eh_ptr_to_error(tx_pos_buffer);
-                goto quit;
-            }
-            ehip_queue_tx(tx_pos_buffer);
-        }
-    }else{
-        netdev = ip_message_first(ip_msg)->netdev;
-        ret = ehip_netdev_trait_hard_header(netdev, ip_message_first(ip_msg), 
+    netdev = ip_message_get_netdev(ip_msg);
+    ip_message_fragment_for_each(pos_buffer, ip_msg){
+        /* 填充链路层头部 */
+        ret = ehip_netdev_trait_hard_header(netdev, pos_buffer, 
             ehip_netdev_trait_hw_addr(netdev), hw_addr,
-            EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(ip_message_first(ip_msg)));
+            EHIP_PTYPE_ETHERNET_IP, ehip_buffer_get_payload_size(pos_buffer));
         if(ret < 0)
             goto quit;
-        ret = ehip_netdev_trait_buffer_padding(netdev, ip_message_first(ip_msg));
+        ret = ehip_netdev_trait_buffer_padding(netdev, pos_buffer);
         if(ret < 0)
             goto quit;
-        tx_pos_buffer = ehip_buffer_ref_dup(ip_message_first(ip_msg));
+
+        tx_pos_buffer = ehip_buffer_ref_dup(pos_buffer);
         if(eh_ptr_to_error(tx_pos_buffer) < 0){
             ret = eh_ptr_to_error(tx_pos_buffer);
             goto quit;
@@ -152,7 +127,7 @@ int ip_tx(ehip_netdev_t *netdev, struct ip_message *ip_msg, int *arp_idx, ipv4_a
     const ehip_hw_addr_t* hw_addr = NULL;
     ipv4_addr_t dst_addr_or_gw_addr;
 
-    if(!ip_message_flag_is_tx(ip_msg) || !ip_message_flag_is_tx_ready(ip_msg)){
+    if(!ip_message_flag_is_tx(ip_msg) || !ip_message_flag_is_ready(ip_msg)){
         ret = EH_RET_INVALID_PARAM;
         goto quit;
     }
