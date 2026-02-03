@@ -188,6 +188,7 @@ struct tcp_pcb{
     /* 该成员向8对齐 */
     EH_STRUCT_CUSTOM_SIGNAL(eh_event_timer_t) 
                                     signal_timer_rto;           /* 超时重传定时器 */
+#define parent_task                 signal_timer_rto.task
     void                            *userdata;
     eh_ringbuf_t*                   rx_buf;
     eh_ringbuf_t*                   tx_buf;
@@ -237,6 +238,7 @@ struct tcp_server_base_opt{
 struct tcp_server_pcb{
     struct eh_hashtbl_node          *node;
     struct tcp_server_base_opt      opt;
+    void                            *userdata;
     uint16_t                        rx_buffer_size;
     uint16_t                        tx_buffer_size;
 };
@@ -323,7 +325,7 @@ struct tcp_send_option_info{
 };
 
 #define tcp_pcb_to_key(pcb)          (((struct tcp_hash_key*)eh_hashtbl_node_key((pcb)->node)))
-#define tcp_pcb_to_netdev(pcb)        (((struct tcp_hash_key*)eh_hashtbl_node_key((pcb)->node))->netdev)
+#define tcp_pcb_to_netdev(pcb)       (((struct tcp_hash_key*)eh_hashtbl_node_key((pcb)->node))->netdev)
 
 #define TCP_OPTION_KIND_EOL                  0
 #define TCP_OPTION_KIND_NOP                  1
@@ -2876,6 +2878,15 @@ void ehip_tcp_server_delete(tcp_server_pcb_t _pcb){
     eh_free(pcb);
 }
 
+void ehip_tcp_server_set_userdata(tcp_server_pcb_t _pcb, void *userdata){
+    struct tcp_server_pcb *pcb = (struct tcp_server_pcb *)_pcb;
+    pcb->userdata = userdata;
+}
+
+void *ehip_tcp_server_get_userdata(tcp_server_pcb_t _pcb){
+    struct tcp_server_pcb *pcb = (struct tcp_server_pcb *)_pcb;
+    return pcb->userdata;
+}
 
 int ehip_tcp_server_listen(tcp_server_pcb_t _pcb){
     struct tcp_server_pcb *pcb = (struct tcp_server_pcb *)_pcb;
