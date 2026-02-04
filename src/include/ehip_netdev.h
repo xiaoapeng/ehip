@@ -120,6 +120,13 @@ extern ehip_netdev_t * ehip_netdev_find(const char *netdev_name);
 
 
 /**
+ * @brief                   遍历所有注册的网卡
+ * @param  netdev           上次遍历返回的网卡句柄，第一次遍历传入NULL
+ * @return ehip_netdev_t*   返回值为NULL时遍历结束
+ */
+extern ehip_netdev_t * ehip_netdev_iterate(ehip_netdev_t *netdev);
+
+/**
  * @brief                   设置网卡LINK状态
  * @param  netdev           网卡句柄
  * @param  status           网卡LINK状态

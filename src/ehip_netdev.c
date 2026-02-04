@@ -84,6 +84,17 @@ ehip_netdev_t * ehip_netdev_find(const char *netdev_name){
     return NULL;
 }
 
+ehip_netdev_t * ehip_netdev_iterate(ehip_netdev_t *netdev){
+    struct eh_list_head *pos;
+    if(netdev){
+        pos = netdev->node.next;
+    }else{
+        pos = s_netdev_head.next;
+    }
+    if(pos == &s_netdev_head)
+        return NULL;
+    return eh_container_of(pos, ehip_netdev_t, node);
+}
 
 void ehip_netdev_set_link_status(ehip_netdev_t *netdev, bool status){
     if(status){

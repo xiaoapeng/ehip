@@ -55,11 +55,11 @@ typedef uint32_be_t ipv4_addr_t;
 
 struct ipv4_netdev{
     struct eh_list_head         node;
-    ipv4_addr_t                 ipv4_addr[EHIP_NETDEV_MAX_IP_NUM];
     uint32_t                    attr_flags;
+    ehip_netdev_t               *netdev;
+    ipv4_addr_t                 ipv4_addr[EHIP_NETDEV_MAX_IP_NUM];
     uint8_t                     ipv4_mask_len[EHIP_NETDEV_MAX_IP_NUM];
     uint8_t                     ipv4_addr_num;
-    ehip_netdev_t               *netdev;
 };
 
 struct __packed ip_hdr {
