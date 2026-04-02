@@ -98,9 +98,9 @@ ehip_netdev_t * ehip_netdev_iterate(ehip_netdev_t *netdev){
 
 void ehip_netdev_set_link_status(ehip_netdev_t *netdev, bool status){
     if(status){
-        eh_event_flags_set_bits(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_LINK);
+        eh_event_flags_set_bits_change_notify(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_LINK);
     }else{
-        eh_event_flags_clear_bits(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_LINK);
+        eh_event_flags_clear_bits_change_notify(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_LINK);
     }
 }
 
@@ -123,7 +123,7 @@ int ehip_netdev_up(ehip_netdev_t *netdev){
         goto ndo_up_error;
     }
 
-    eh_event_flags_set_bits(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_UP);
+    eh_event_flags_set_bits_change_notify(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_UP);
     return EH_RET_OK;
 ndo_up_error:
     _ehip_core_netdev_down(netdev);
@@ -133,7 +133,7 @@ _ehip_core_netdev_up_error:
 }
 
 void ehip_netdev_down(ehip_netdev_t *netdev){
-    eh_event_flags_clear_bits(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_UP);
+    eh_event_flags_clear_bits_change_notify(eh_signal_to_custom_event(&netdev->signal_status), EHIP_NETDEV_STATUS_UP);
 
     if(netdev->param->ops && netdev->param->ops->ndo_down)
         netdev->param->ops->ndo_down(netdev);
