@@ -60,11 +60,26 @@ static struct route_table_entry * ehip_ipv4_route_find(const struct route_info *
     struct route_table_entry *pos;
     eh_list_for_each_entry(pos, &route_head, node){
         if( pos->route.dst_addr == route->dst_addr &&
-            (pos->route.gateway == 0 || pos->route.gateway == route->gateway) &&
-            (pos->route.mask_len == 0 || pos->route.mask_len == route->mask_len) &&
-            (pos->route.netdev == NULL || pos->route.netdev == route->netdev) &&
-            (pos->route.src_addr == IPV4_ADDR_ANY || pos->route.src_addr == route->src_addr) && 
-            (pos->route.metric == 0 || pos->route.metric == route->metric)
+            pos->route.gateway == route->gateway &&
+            pos->route.mask_len == route->mask_len &&
+            pos->route.netdev == route->netdev &&
+            pos->route.src_addr == route->src_addr &&
+            pos->route.metric == route->metric
+        )
+            return pos;
+    }
+    return NULL;
+}
+
+static struct route_table_entry * ehip_ipv4_route_find_wc(const struct route_info *route){
+    struct route_table_entry *pos;
+    eh_list_for_each_entry(pos, &route_head, node){
+        if( pos->route.dst_addr == route->dst_addr &&
+            (route->gateway == IPV4_ADDR_ANY || pos->route.gateway == route->gateway) &&
+            (route->mask_len == 0 || pos->route.mask_len == route->mask_len) &&
+            (route->netdev == NULL || pos->route.netdev == route->netdev) &&
+            (route->src_addr == IPV4_ADDR_ANY || pos->route.src_addr == route->src_addr) &&
+            (route->metric == 0 || pos->route.metric == route->metric)
         )
             return pos;
     }
@@ -123,9 +138,32 @@ eh_signal_slot_connect_err:
 }
 
 
+int ipv4_route_to_array(struct route_info **route_array){
+    struct route_table_entry *pos;
+    struct route_info *array;
+    size_t i = 0;
+
+    eh_param_assert(route_array);
+
+    if(route_cnt == 0){
+        *route_array = NULL;
+        return 0;
+    }
+
+    array = eh_malloc(sizeof(struct route_info) * route_cnt);
+    if(array == NULL)
+        return EH_RET_MALLOC_ERROR;
+
+    eh_list_for_each_entry(pos, &route_head, node)
+        array[i++] = pos->route;
+
+    *route_array = array;
+    return (int)route_cnt;
+}
+
 int ipv4_route_del(const struct route_info *route){
     struct route_table_entry *entry;
-    entry = ehip_ipv4_route_find(route);
+    entry = ehip_ipv4_route_find_wc(route);
     if(entry == NULL)
         return EH_RET_INVALID_PARAM;
     _ehip_ipv4_route_delete(entry);
