@@ -41,10 +41,10 @@ const struct ehip_netdev_trait_ops loopback_dev_trait_ops = {
 
 int loopback_dev_trait_change(ehip_netdev_t *netdev, const void *type_ptr, const void *src_ptr){
     // struct loopback_trait *netdev_loopback_trait = (struct loopback_trait *)ehip_netdev_to_trait(netdev);
-    long long_offset = (long)type_ptr-(long)netdev;
+    intptr_t long_offset = (intptr_t)type_ptr-(intptr_t)netdev;
     uint16_t offset;
     int ret = 0;
-    if(long_offset >= (long)(sizeof(ehip_netdev_t) + sizeof(struct loopback_trait))){
+    if(long_offset >= (intptr_t)(sizeof(ehip_netdev_t) + sizeof(struct loopback_trait))){
         return EH_RET_INVALID_PARAM;
     }
     offset = (uint16_t)long_offset;

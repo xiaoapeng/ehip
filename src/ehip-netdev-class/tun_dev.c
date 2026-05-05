@@ -37,10 +37,10 @@ const struct ehip_netdev_trait_ops tun_dev_trait_ops = {
 };
 
 int tun_dev_trait_change(ehip_netdev_t *netdev, const void *type_ptr, const void *src_ptr){
-    long long_offset = (long)type_ptr-(long)netdev;
+    intptr_t long_offset = (intptr_t)type_ptr-(intptr_t)netdev;
     uint16_t offset;
     int ret = 0;
-    if(long_offset >= (long)(sizeof(ehip_netdev_t) + sizeof(struct tun_trait))){
+    if(long_offset >= (intptr_t)(sizeof(ehip_netdev_t) + sizeof(struct tun_trait))){
         return EH_RET_INVALID_PARAM;
     }
     offset = (uint16_t)long_offset;
